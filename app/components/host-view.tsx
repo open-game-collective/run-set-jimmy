@@ -159,7 +159,7 @@ const PlayerSlot = ({
 
 const PlayerList = ({ 
   players, 
-  maxPlayers = 10,
+  maxPlayers = 7,
   hostId,
   onRemovePlayer,
 }: { 
@@ -178,7 +178,7 @@ const PlayerList = ({
       className="bg-gray-800/30 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50"
     >
       <h2 className="text-xl font-bold mb-3 text-indigo-300 flex items-center gap-2">
-        <Users className="w-5 h-5" /> Players ({players.length}/{maxPlayers})
+        <Users className="w-5 h-5" /> Players ({players.length}/7)
       </h2>
       <div className="space-y-2">
         {slots.map((player, index) => (
@@ -209,7 +209,7 @@ const LobbyControls = ({
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
 
-  // Construct the game URL using the host and game ID
+  // Update the game URL to use runsetjimmy.tv
   const gameUrl = `https://${host}/games/${gameState.id}`;
 
   const copyGameLink = async () => {
@@ -221,8 +221,8 @@ const LobbyControls = ({
   const shareGameLink = async () => {
     try {
       await navigator.share({
-        title: 'Join my Trivia Jam game!',
-        text: 'Click to join my Trivia Jam game!',
+        title: 'Join my Run Set Jimmy game!',
+        text: 'Click to join my Run Set Jimmy game!',
         url: gameUrl
       });
     } catch (err) {

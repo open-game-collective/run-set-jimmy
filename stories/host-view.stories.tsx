@@ -19,7 +19,7 @@ const meta = {
     autoplay: true,
   },
   args: {
-    host: "dev.triviajam.tv"  // Default host value
+    host: "dev.runsetjimmy.tv"  // Updated host value
   },
   decorators: [
     withActorKit<SessionMachine>({
@@ -83,6 +83,10 @@ export const InLobby: Story = {
           public: {
             ...defaultGameSnapshot.public,
             hostId: "host-123",
+            settings: {
+              maxPlayers: 7,
+              questionCount: 40,
+            },
             players: [
               { id: "player-1", name: "Player 1", score: 0 },
               { id: "player-2", name: "Player 2", score: 0 },
@@ -108,23 +112,11 @@ export const InLobby: Story = {
       },
     });
 
-    // Mock clipboard API before mounting
-    const mockClipboard = {
-      writeText: fn().mockImplementation(() => Promise.resolve()),
-    };
-    Object.defineProperty(navigator, 'clipboard', {
-      value: mockClipboard,
-      writable: true,
-      configurable: true
-    });
-
-    await step('Mount component with initial state', async () => {
-      await mount(
-        <GameContext.ProviderFromClient client={gameClient}>
-          <HostView host="dev.triviajam.tv" />
-        </GameContext.ProviderFromClient>
-      );
-    });
+    await mount(
+      <GameContext.ProviderFromClient client={gameClient}>
+        <HostView host="dev.runsetjimmy.tv" />
+      </GameContext.ProviderFromClient>
+    );
 
     await step('Verify game link section', async () => {
       const gameLinkButton = await canvas.findByTestId("game-link-button");
@@ -201,7 +193,7 @@ export const QuestionControls: Story = {
 
     await mount(
       <GameContext.ProviderFromClient client={gameClient}>
-        <HostView host="dev.triviajam.tv" />
+        <HostView host="dev.runsetjimmy.tv" />
       </GameContext.ProviderFromClient>
     );
 
@@ -288,7 +280,7 @@ export const GameFinished: Story = {
     },
   },
   play: async ({ canvas, mount }) => {
-    await mount(<HostView host="dev.triviajam.tv" />);
+    await mount(<HostView host="dev.runsetjimmy.tv" />);
 
     // Verify final scores display
     const player1Score = await canvas.findByText("Player 1");

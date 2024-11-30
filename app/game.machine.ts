@@ -146,7 +146,7 @@ export const gameMachine = setup({
       gameStatus: "lobby" as const,
       winner: null,
       settings: {
-        maxPlayers: 10,
+        maxPlayers: 7,
         questionCount: 40,
       },
       questionNumber: 0,

@@ -1,0 +1,14 @@
+node_modules/
+# Build
+dist
+public/dist
+# Logs
+*.log
+npm-debug.log*
+# Temporary and cache directories
+.cache
+# Wrangler
+.dev.vars
+.wrangler/
+*storybook.log
+storybook-static/

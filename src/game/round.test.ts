@@ -10,6 +10,7 @@ import {
   draw,
   goDown,
   playOn,
+  requestsOf,
   requestBuy,
   scoreRound,
   type Result,
@@ -607,5 +608,115 @@ describe("mutation gaps", () => {
     expect(seat(s, "b").hand).toHaveLength(13);
     expect(seat(s, "b").hand.at(-2)?.id).toBe(pile[4]?.id);
     expect(seat(s, "a").hand).toHaveLength(12);
+  });
+});
+
+describe("mutation gaps: round", () => {
+  const players = ["a", "b", "c", "d"];
+  const dealAt = (cutAt: number, seed = 3) => deal({ seatIds: players, round: 1, dealer: 0, rng: mulberry32(seed), cutAt });
+
+  it("a cut that isn't a joker stays in the deck: 4 hands of 11, one discard, the other 117 in the deck", () => {
+    const s = [0, 1, 2, 3, 4, 5].map((at) => dealAt(at)).find((x) => x.cut && !x.cut.kept);
+    if (!s) throw new Error("every cut was a joker?");
+    expect(s.deck).toHaveLength(162 - 44 - 1);
+  });
+
+  it("seeds the reshuffle from the deal's random numbers, as a whole number", () => {
+    const seeds = [1, 2, 3].map((seed) => dealAt(0, seed).seed);
+    expect(new Set(seeds).size).toBe(3);
+    for (const seed of seeds) {
+      expect(Number.isInteger(seed)).toBe(true);
+      expect(seed).toBeGreaterThan(0);
+    }
+  });
+
+  it("each reshuffle moves the seed on by one", () => {
+    const s0 = rig({ hands: [filler(11), filler(11)], deck: [], discard: [c(2), c(3), c(4)], seed: 41 });
+    expect(ok(draw(s0, "a", "deck")).seed).toBe(42);
+  });
+
+  it("nobody has asked to buy outside the draw and the offer", () => {
+    expect(requestsOf({ kind: "play" })).toEqual([]);
+    expect(requestsOf({ kind: "out", winner: "a" })).toEqual([]);
+    expect(requestsOf({ kind: "offer", requests: ["b"] })).toEqual(["b"]);
+  });
+
+  it("letting the discard go takes it off the pile", () => {
+    const pile = [c(2), c(3), c(4)];
+    const s0 = rig({ hands: [filler(11), filler(11), filler(11)], discard: pile, phase: { kind: "offer", requests: ["c"] } });
+    const s = ok(answerOffer(s0, "a", "let-go"));
+    expect(ids(s.discard)).toEqual(ids(pile.slice(0, 2)));
+    expect(seat(s, "c").hand.at(-2)?.id).toBe(pile[2]?.id);
+  });
+
+  it("letting the discard go with nobody left to sell to just draws from the deck", () => {
+    const s0 = rig({ hands: [filler(11), filler(11), filler(11)], phase: { kind: "offer", requests: [] } });
+    const top = s0.deck[0];
+    const s = ok(answerOffer(s0, "a", "let-go"));
+    expect(seat(s, "a").hand.at(-1)).toBe(top);
+    expect(s.discard).toEqual(s0.discard);
+    expect(s.seats.slice(1).every((x) => x.hand.length === 11 && x.buys === 0)).toBe(true);
+  });
+
+  it("an offer can't be answered once the round is over", () => {
+    const s0 = rig({ hands: [[], filler(11)], phase: { kind: "out", winner: "a" } });
+    expect(reason(answerOffer(s0, "a", "take"))).toMatch(/round is over/);
+  });
+
+  it("a run proposed without a spare end puts its spare joker on the high end", () => {
+    const run = [c(7), J(), c(5), c(6)];
+    const set = [c(9, "S"), c(9, "D"), c(9, "C")];
+    const s0 = rig({ hands: [[...run, ...set, c(2, "S"), c(3, "S")], filler(11)], phase: { kind: "play" } });
+    const s = ok(goDown(s0, "a", [{ kind: "run", cardIds: ids(run) }, { kind: "set", cardIds: ids(set) }]));
+    const meld = s.melds[0]?.meld;
+    expect(meld?.kind === "run" && meld.low).toBe(5);
+    expect(meld?.cards.map((x) => (x.kind === "joker" ? "J" : x.rank))).toEqual([5, 6, 7, "J"]);
+  });
+
+  it("numbers new melds on from the table's next id", () => {
+    const run = [c(4), c(5), c(6), c(7)];
+    const set = [c(9, "S"), c(9, "D"), c(9, "C")];
+    const s0 = rig({ hands: [[...run, ...set, c(2, "S"), c(3, "S")], filler(11)], phase: { kind: "play" }, nextMeldId: 5 });
+    const s = ok(goDown(s0, "a", [{ kind: "run", cardIds: ids(run) }, { kind: "set", cardIds: ids(set) }]));
+    expect(s.melds.map((m) => m.id)).toEqual(["m5", "m6"]);
+    expect(s.nextMeldId).toBe(7);
+  });
+
+  it("a player who is down still has to draw before playing on the table", () => {
+    const nine = c(9);
+    const hand = [nine, c(2, "S"), c(3, "S")];
+    const s0 = rig({
+      hands: [hand, filler(11)],
+      seats: [
+        { id: "a", hand, down: true, buys: 0 },
+        { id: "b", hand: filler(11), down: true, buys: 0 },
+      ],
+      melds: [{ id: "m1", owner: "b", meld: { kind: "run", suit: "H", low: 5, cards: [c(5), c(6), c(7), c(8)] } }],
+    });
+    expect(reason(playOn(s0, "a", nine.id, "m1", { at: "high" }))).toMatch(/draw first/);
+    expect(reason(playOn({ ...s0, phase: { kind: "play" } }, "b", nine.id, "m1", { at: "high" }))).toMatch(/not your turn/);
+  });
+});
+
+describe("mutation gaps: round, second pass", () => {
+  it("a cut card that isn't a joker goes back into the deck, not into the cutter's hand", () => {
+    const s = deal({ seatIds: ["a", "b", "c", "d"], round: 1, dealer: 0, rng: mulberry32(3), cutAt: 150 });
+    if (!s.cut || s.cut.kept) throw new Error("expected a natural at the cut");
+    const cutId = s.cut.card.id;
+    expect(ids(s.deck)).toContain(cutId);
+    expect(ids(seat(s, "d").hand)).not.toContain(cutId);
+  });
+
+  it("refuses an extra run even when the sets are right", () => {
+    const runs = [[c(4), c(5), c(6), c(7)], [c(8, "S"), c(9, "S"), c(10, "S"), c(11, "S")]];
+    const set = [c(9, "D"), c(9, "C"), c(9, "H")];
+    const hand = [...runs.flat(), ...set, c(2, "C"), c(3, "C")];
+    const s0 = rig({ hands: [hand, filler(11)], phase: { kind: "play" } });
+    const proposals = [
+      { kind: "run" as const, cardIds: ids(runs[0] ?? []) },
+      { kind: "run" as const, cardIds: ids(runs[1] ?? []) },
+      { kind: "set" as const, cardIds: ids(set) },
+    ];
+    expect(reason(goDown(s0, "a", proposals))).toMatch(/exactly 1 run and 1 set/);
   });
 });

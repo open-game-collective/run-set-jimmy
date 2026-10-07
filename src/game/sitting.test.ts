@@ -29,3 +29,9 @@ describe("sittingReport: the label the OGS app shows for this sitting", () => {
     });
   });
 });
+
+describe("mutation gaps: sittingReport", () => {
+  it("leaves the resume URL out entirely when there isn't one", () => {
+    expect("resumeUrl" in sittingReport(base)).toBe(false);
+  });
+});

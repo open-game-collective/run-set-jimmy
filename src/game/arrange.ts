@@ -11,6 +11,7 @@ type Span = { placed: Placed[]; low: number; high: number };
 /** Are all the naturals of one suit (and is there at least one)? */
 function oneSuit(naturals: readonly Natural[]): boolean {
   const suit = naturals[0]?.suit;
+  // Stryker disable next-line ConditionalExpression: equivalent: with no naturals every() is vacuously true, but the empty option has no span, so arrangeRun is still null
   return suit !== undefined && naturals.every((c) => c.suit === suit);
 }
 
@@ -20,9 +21,11 @@ function aceOptions(naturals: readonly Natural[]): Placed[][] {
   const others = naturals.filter((c) => c.rank !== 1).map((c) => ({ card: c, value: c.rank }));
   if (!first) return [others];
   if (!second) return [[{ card: first, value: 1 }, ...others], [...others, { card: first, value: HIGHEST }]];
+  // Stryker disable next-line ArrayDeclaration: equivalent: a junk option spreads to items with no value, which read as duplicates, so it never fits
   return more.length === 0 ? [[{ card: first, value: 1 }, ...others, { card: second, value: HIGHEST }]] : [];
 }
 
+// Stryker disable next-line ConditionalExpression,EqualityOperator,OptionalChaining: equivalent: at i = 0 placed[-1] is undefined and never equals a number; for i > 0 placed[i - 1] exists
 const hasDuplicateValue = (placed: readonly Placed[]) => placed.some((p, i) => i > 0 && p.value === placed[i - 1]?.value);
 
 /** The option sorted by value; null when it is empty or two cards want the same spot. */
@@ -30,6 +33,7 @@ function spanOf(option: readonly Placed[]): Span | null {
   const placed = [...option].sort((a, b) => a.value - b.value);
   const first = placed[0];
   const last = placed.at(-1);
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent: oneSuit guarantees a natural, so every option is non-empty and first/last are both defined
   if (!first || !last || hasDuplicateValue(placed)) return null;
   return { placed, low: first.value, high: last.value };
 }
@@ -46,6 +50,7 @@ function fillGaps({ placed, low, high }: Span, pool: Joker[]): Card[] {
   const middle: Card[] = [];
   for (let v = low, i = 0; v <= high; v++) {
     const next = placed[i];
+    // Stryker disable next-line OptionalChaining: equivalent: the last placed card sits at `high`, so placed[i] exists while v <= high
     if (next?.value === v) {
       middle.push(next.card);
       i++;
@@ -61,6 +66,7 @@ const goesHigh = (spare: "high" | "low", lowOpen: boolean, highOpen: boolean) =>
 function spareEnd(spare: "high" | "low", low: number, high: number): "high" | "low" | null {
   const lowOpen = low > 1;
   if (goesHigh(spare, lowOpen, high < HIGHEST)) return "high";
+  // Stryker disable next-line StringLiteral: equivalent: withSpares treats any end that is not null or "high" as the low end
   return lowOpen ? "low" : null;
 }
 
@@ -101,6 +107,7 @@ export function arrangeRun(cards: readonly Card[], spare: "high" | "low" = "high
 export function placementsFor(run: RunMeld, card: Card): RunPlacement[] {
   const tries: RunPlacement[] = [{ at: "low" }, { at: "high" }];
   run.cards.forEach((x, i) => {
+    // Stryker disable next-line ConditionalExpression: equivalent: replacing a natural is refused by playOnRun and filtered out
     if (x.kind === "joker") tries.push({ replace: i, jokerTo: "low" }, { replace: i, jokerTo: "high" });
   });
   return tries.filter((p) => playOnRun(run, card, p).ok);

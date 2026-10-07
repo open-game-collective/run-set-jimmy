@@ -18,3 +18,9 @@ describe("words", () => {
     expect([1, 8, 11, 12, 13].map(rankPlural)).toEqual(["Aces", "8s", "Jacks", "Queens", "Kings"]);
   });
 });
+
+describe("mutation gaps: words", () => {
+  it("a high Ace (14) is still Aces", () => {
+    expect(rankPlural(14)).toBe("Aces");
+  });
+});

@@ -49,3 +49,11 @@ describe("standings order", () => {
     ]);
   });
 });
+
+describe("mutation gaps: winners", () => {
+  it("a finished sheet with nobody on it has no winners", () => {
+    let sheet = newScoreSheet([]);
+    for (let i = 0; i < 7; i++) sheet = addRound(sheet, {});
+    expect(winners(sheet)).toEqual([]);
+  });
+});

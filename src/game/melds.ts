@@ -44,6 +44,7 @@ function runFitsFrom(cards: readonly Card[], low: number): boolean {
 /** The value of the run's first spot, trying an Ace low then high; undefined when no order works. */
 function runLowFor(cards: readonly Card[], first: Natural): number | undefined {
   const at = cards.indexOf(first);
+  // Stryker disable next-line ArithmeticOperator: equivalent: an Ace past index 0 can't be low (low <= 0); 1 + at puts it at 1 + 2·at, which an Ace never fills
   const lows = first.rank === 1 ? [1 - at, HIGHEST - at] : [first.rank - at];
   return lows.find((l) => runFitsFrom(cards, l));
 }
@@ -89,6 +90,7 @@ function extendRun(run: RunMeld, card: Card, end: "low" | "high"): MeldResult<Ru
 
 /** Only the natural card a joker stands for can take its spot. */
 const standsFor = (run: RunMeld, card: Card, spot: number) =>
+  // Stryker disable next-line ConditionalExpression: equivalent: a joker has no suit, so the suit check refuses it anyway
   card.kind === "card" && card.suit === run.suit && fills(card, run.low + spot);
 
 const swapAt = (cards: readonly Card[], spot: number, card: Card): Card[] => cards.map((c, i) => (i === spot ? card : c));

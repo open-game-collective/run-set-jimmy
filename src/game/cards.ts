@@ -9,9 +9,11 @@ export type Card = Natural | Joker;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 7;
 
+const isPlayerCount = (players: number) => Number.isInteger(players) && players >= MIN_PLAYERS && players <= MAX_PLAYERS;
+
 /** 2 decks for 2–3 players, 3 decks for 4–7. */
 export function decksFor(players: number): number {
-  if (!Number.isInteger(players) || players < MIN_PLAYERS || players > MAX_PLAYERS) {
+  if (!isPlayerCount(players)) {
     throw new Error(`Run Set Jimmy is for 2–7 players, got ${players}`);
   }
   return players <= 3 ? 2 : 3;

@@ -11,6 +11,7 @@ import { applyOrder, builderSlots, placementLabel, slotStatus, sortHand, toPropo
 import { haptic } from "../haptics";
 import { sounds } from "../sound";
 import { Hand } from "./Hand";
+import { turnLine } from "../turn-line";
 
 type MeldView = RoomPublicContext["melds"][number];
 
@@ -128,6 +129,27 @@ export function PhonePlay() {
     if (meld.kind === "run") setChoice({ meldId: m.id, cardId: selectedCard.id, options: where, run: meld });
   };
 
+  const banner = turnLine({
+    myTurn,
+    phase: pub.turnPhase,
+    down,
+    windowOpen: pub.window !== null,
+    offerFrom: pub.offer ? (pub.seats[pub.offer.buyer]?.name ?? null) : null,
+    turnName,
+    top: top ? cardName(top) : null,
+    canBuy: me?.canBuy === true,
+    buyRequested: me?.buyRequested === true,
+  });
+  // A tick and a chime when the turn comes round to this phone.
+  const wasMine = useRef(myTurn);
+  useEffect(() => {
+    if (myTurn && !wasMine.current) {
+      haptic(40);
+      sounds.take();
+    }
+    wasMine.current = myTurn;
+  }, [myTurn]);
+
   const req = pub.requirement;
   const allReady = builder !== null && builder.every((s) => slotStatus(s.kind, s.cards, s.spare).ok);
 
@@ -146,6 +168,10 @@ export function PhonePlay() {
           {top ? <PlayingCard card={top} className="mini" /> : null}
         </div>
       </header>
+
+      <p className={`turn-banner ${banner.mine ? "mine" : ""}`} data-testid="turn-banner" aria-live="polite">
+        {banner.text}
+      </p>
 
       <section className="phone-table" data-testid="phone-table">
         {pub.melds.length === 0 ? <p className="muted">Nobody is down yet.</p> : null}
@@ -181,7 +207,9 @@ export function PhonePlay() {
       <section className="actions" data-testid="actions">
         {builder ? (
           <div className="builder" data-testid="builder">
-            <p className="builder-help">Tap a box, then tap cards to put in it.</p>
+            <p className="builder-help">
+              Adding to <b>{builder[active]?.label}</b>: tap cards in your hand. Tap another box to switch.
+            </p>
             <div className="slots">
               {builder.map((s, i) => {
                 const status = slotStatus(s.kind, s.cards, s.spare);

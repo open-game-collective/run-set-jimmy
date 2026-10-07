@@ -448,8 +448,27 @@ button { font: inherit; color: inherit; }
 .cut-deck { position: relative; height: 140px; margin: 20px 0; cursor: pointer; }
 .cut-deck .card { --w: 70px; position: absolute; top: 20px; }
 
-/* Play */
-.play { gap: 10px; }
+/* Play: a fixed full-height layout; only the table scrolls, the hand stays pinned at the bottom. */
+.play { gap: 8px; height: 100dvh; min-height: 0; overflow: hidden; }
+.play > * { flex: none; }
+.play > .phone-table { flex: 1 1 auto; min-height: 0; }
+.turn-banner {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 16px;
+  text-align: center;
+  background: rgba(6, 26, 24, 0.55);
+  color: var(--muted);
+}
+.turn-banner.mine { background: linear-gradient(180deg, var(--brass-hi), var(--brass)); color: var(--ink); animation: rise 260ms ease-out; }
+@media (max-height: 700px) {
+  .play .card.mini { --w: 30px; }
+  .play-head .req { font-size: 18px; }
+  .hand-card .card { --w: min(42px, calc((100vw - 52px) / 7)); }
+  .actions .btn { min-height: 46px; padding: 10px 12px; }
+}
 .play-head { display: flex; justify-content: space-between; align-items: center; }
 .play .req { font-family: var(--display); font-size: 22px; font-weight: 700; margin: 2px 0 0; }
 .mini-pile { display: flex; gap: 8px; align-items: center; }
@@ -485,6 +504,7 @@ button { font: inherit; color: inherit; }
 
 .builder { display: flex; flex-direction: column; gap: 8px; }
 .builder-help { margin: 0; font-size: 14px; color: var(--muted); text-align: center; }
+.builder-help b { color: var(--brass-hi); }
 .slots { display: flex; flex-direction: column; gap: 6px; }
 .slot { border: 1.5px dashed rgba(201, 162, 74, 0.5); border-radius: 12px; padding: 8px; min-height: 64px; }
 .slot.active { border-style: solid; border-color: var(--brass-hi); background: rgba(236, 208, 138, 0.06); }

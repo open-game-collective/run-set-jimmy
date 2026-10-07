@@ -9,5 +9,27 @@
       "references": []
     },
     "date": "2026-10-07"
+  },
+  {
+    "files": [
+      "assets/art/icon-src.png"
+    ],
+    "source": "Codex image_generation (gpt-image, ChatGPT plan) (generated)",
+    "input": {
+      "prompt": "Square app icon, bold and readable at small size. Painterly mid-century illustration in a 1962 supper-club style: deep teal-green felt, warm brass light, cream playing cards with oxblood red and ink black suits, art-deco oxblood-and-brass card backs. No people, no faces anywhere (court cards show only an ornate letter), no text, no letters, no logos, no UI. A tight fan of four cream playing cards (a heart, a spade, a diamond and a brass starburst joker in front) on deep teal felt, with a soft brass rim light. Simple, centered, strong silhouette, little background detail.",
+      "references": []
+    },
+    "date": "2026-10-07"
+  },
+  {
+    "files": [
+      "assets/art/cover-src.png"
+    ],
+    "source": "Codex image_generation (gpt-image, ChatGPT plan) (generated)",
+    "input": {
+      "prompt": "Tall 2:3 portrait composition for a game cover. Painterly mid-century illustration in a 1962 supper-club style: deep teal-green felt, warm brass light, cream playing cards with oxblood red and ink black suits, art-deco oxblood-and-brass card backs. No people, no faces anywhere (court cards show only an ornate letter), no text, no letters, no logos, no UI. Looking down at a felt card table: a long run of hearts fanning diagonally up the frame, a set of three eights, a brass starburst joker, brass chips, the edge of a brass lamp glowing at the top. Leave the top third as calm, darker empty felt for a title to be lettered over later.",
+      "references": []
+    },
+    "date": "2026-10-07"
   }
 ]

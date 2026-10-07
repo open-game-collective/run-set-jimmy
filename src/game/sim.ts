@@ -1,28 +1,34 @@
 import { applyBot, botMove, wantsBuy } from "./bot";
 import { mulberry32 } from "./cards";
 import { addRound, dealerFor, newScoreSheet, winners, type ScoreSheet } from "./game";
-import { ROUNDS, closeBuyWindow, deal, requestBuy, scoreRound, type RoundState } from "./round";
+import { ROUNDS, closeBuyWindow, deal, requestBuy, scoreRound, windowIsOpen, type RoundState } from "./round";
 
 const MAX_STEPS = 20_000;
 
 export type RoundLog = { scores: Record<string, number>; turns: number; buys: number };
 export type GameLog = { rounds: RoundLog[]; winners: string[]; sheet: ScoreSheet };
 
+const turnIdOf = (s: RoundState): string => s.seats[s.turn]?.id ?? "";
+
+/** A non-turn bot asks to buy the discard when it wants it (and the rules let it). */
+function askToBuy(s: RoundState, seatId: string, turnId: string): RoundState {
+  if (seatId === turnId || !wantsBuy(s, seatId)) return s;
+  const r = requestBuy(s, seatId);
+  return r.ok ? r.state : s;
+}
+
+/** During a buy window: everyone else may ask to buy, then the turn player moves or the window closes. */
+function stepWindow(s: RoundState, turnId: string): RoundState {
+  const next = s.seats.reduce((state, seat) => askToBuy(state, seat.id, turnId), s);
+  const move = botMove(next, turnId);
+  if (move) return must(applyBot(next, turnId, move), move.type);
+  return must(closeBuyWindow(next), "close window");
+}
+
 /** One step of bots playing a round: buy requests during a window, then the turn player's move. */
 export function stepRound(s: RoundState): RoundState {
-  const turnId = s.seats[s.turn]?.id ?? "";
-  if (s.phase.kind === "draw" && s.phase.window === "open") {
-    let next = s;
-    for (const seat of s.seats) {
-      if (seat.id !== turnId && wantsBuy(next, seat.id)) {
-        const r = requestBuy(next, seat.id);
-        if (r.ok) next = r.state;
-      }
-    }
-    const move = botMove(next, turnId);
-    if (move) return must(applyBot(next, turnId, move), move.type);
-    return must(closeBuyWindow(next), "close window");
-  }
+  const turnId = turnIdOf(s);
+  if (windowIsOpen(s.phase)) return stepWindow(s, turnId);
   const move = botMove(s, turnId);
   if (!move) throw new Error(`bot ${turnId} has no move in phase ${s.phase.kind}`);
   return must(applyBot(s, turnId, move), move.type);

@@ -140,7 +140,8 @@ const updateSeat = (s: RoundState, id: string, f: (seat: Seat) => Seat): RoundSt
 
 /** Is the buy window open (the turn player hasn't drawn and others may still ask to buy)? */
 export const windowIsOpen = (phase: Phase): boolean => phase.kind === "draw" && phase.window === "open";
-const requestsOf = (phase: Phase): readonly string[] => ("requests" in phase ? phase.requests : []);
+/** Who has asked to buy the discard (only while drawing or during an offer). */
+export const requestsOf = (phase: Phase): readonly string[] => ("requests" in phase ? phase.requests : []);
 
 /** The discards (all but the top) shuffled into a fresh deck; null when there are none to shuffle. */
 function reshuffled(s: RoundState): RoundState | null {

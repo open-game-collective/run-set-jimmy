@@ -2,6 +2,7 @@ import { RoomContext } from "../../room.context";
 import { CardBack } from "../cards";
 import { haptic } from "../haptics";
 import { sounds } from "../sound";
+import { RoundPips } from "../RoundPips";
 
 /** Before each deal: the cutter taps anywhere along the deck. Everyone else waits. */
 export function PhoneCut() {
@@ -13,7 +14,7 @@ export function PhoneCut() {
   return (
     <div className="phone cut">
       <header className="phone-head">
-        <p className="kicker">Round {round} of 7</p>
+        <RoundPips round={round} />
         <h2 className="req-big">{req}</h2>
       </header>
       {mustCut ? (

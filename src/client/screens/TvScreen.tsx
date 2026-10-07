@@ -1,7 +1,8 @@
 import { useOgsSession } from "@open-game-system/profile-kit/react";
 import qrcode from "qrcode-generator";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ROUNDS } from "../../game/round";
+import { ROUNDS, ROUND_NAMES, ROUND_SHORT } from "../../game/round";
+import { RoundPips } from "../RoundPips";
 import { cardName } from "../../game/words";
 import { RoomContext } from "../../room.context";
 import type { RoomPublicContext } from "../../room.types";
@@ -133,9 +134,7 @@ function RoundBanner({ pub }: { pub: Pub }) {
   return (
     <header className="round-banner">
       <Wordmark />
-      <p className="round-of">
-        Round {pub.round} <span>of {ROUNDS}</span>
-      </p>
+      <RoundPips round={pub.round} className="round-of" />
       <p className="requirement" data-testid="requirement">
         {pub.requirement?.name ?? ""}
       </p>
@@ -284,8 +283,8 @@ function Scoreboard({ pub, final }: { pub: Pub; final: boolean }) {
           <tr>
             <th />
             {Array.from({ length: ROUNDS }, (_, r) => (
-              <th key={r} className={r === pub.scores.length - 1 && !final ? "now" : ""}>
-                {r + 1}
+              <th key={r} className={r === pub.scores.length - 1 && !final ? "now" : ""} title={ROUND_NAMES[r]}>
+                {ROUND_SHORT[r]}
               </th>
             ))}
             <th className="total">Total</th>
@@ -309,7 +308,7 @@ function Scoreboard({ pub, final }: { pub: Pub; final: boolean }) {
         </tbody>
       </table>
       <p className="score-next">
-        {final ? `${pub.seats[0]?.name ?? "The host"} can start a new game.` : `${pub.seats[0]?.name ?? "The host"} deals round ${pub.round + 1}.`}
+        {final ? `${pub.seats[0]?.name ?? "The host"} can start a new game.` : `${pub.seats[0]?.name ?? "The host"} deals the next round: ${ROUND_NAMES[pub.round] ?? ""}.`}
       </p>
     </main>
   );

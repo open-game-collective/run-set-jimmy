@@ -1,4 +1,4 @@
-import { ROUNDS } from "../../game/round";
+import { ROUND_NAMES } from "../../game/round";
 import { RoomContext } from "../../room.context";
 
 /** Between rounds and at the end: this round's points and the running totals. The host deals on. */
@@ -13,7 +13,7 @@ export function PhoneScores({ final }: { final: boolean }) {
   return (
     <div className="phone scores">
       <header className="phone-head">
-        <p className="kicker">{final ? "Final scores" : `Round ${pub.round} of ${ROUNDS}`}</p>
+        <p className="kicker">{final ? "Final scores" : (pub.requirement?.name ?? "")}</p>
         <h2 className="req-big">
           {final
             ? iWon
@@ -36,7 +36,7 @@ export function PhoneScores({ final }: { final: boolean }) {
       <footer className="phone-foot">
         {me?.isHost ? (
           <button className="btn primary big" onClick={() => send({ type: final ? "NEW_GAME" : "NEXT_ROUND" })}>
-            {final ? "New game" : `Deal round ${pub.round + 1}`}
+            {final ? "New game" : `Deal ${ROUND_NAMES[pub.round] ?? "the next round"}`}
           </button>
         ) : (
           <p className="muted center-text">

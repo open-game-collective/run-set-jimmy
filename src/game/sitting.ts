@@ -1,4 +1,4 @@
-import { ROUNDS } from "./round";
+import { ROUND_NAMES } from "./round";
 
 /** The OGS catalogue's id for this game (also the `aud` of its game tokens). */
 export const APP_ID = "run-set-jimmy";
@@ -25,9 +25,9 @@ const statusOf = (input: SittingInput): SittingReport["status"] =>
   input.gameOver ? "completed" : input.round > 0 ? "active" : "lobby";
 
 const titleOf = (input: SittingInput, room: string): string =>
-  input.gameOver ? "Final scores" : input.round > 0 ? `Round ${input.round} of ${ROUNDS}` : room;
+  input.gameOver ? "Final scores" : input.round > 0 ? (ROUND_NAMES[input.round - 1] ?? `Round ${input.round}`) : room;
 
-/** What OGS shows for this sitting: the room, then "Round 3 of 7", then "Final scores". */
+/** What OGS shows for this sitting: the room, then the round's name ("Two runs"), then "Final scores". */
 export function sittingReport(input: SittingInput): SittingReport {
   const room = `Room ${input.roomCode}`;
   return {

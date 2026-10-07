@@ -14,8 +14,9 @@ describe("sittingReport: the label the OGS app shows for this sitting", () => {
     });
   });
 
-  it("names the round once play starts", () => {
-    expect(sittingReport({ ...base, round: 3 })).toMatchObject({ status: "active", title: "Round 3 of 7", detail: "Room KQTP" });
+  it("names the round by what it asks for once play starts", () => {
+    expect(sittingReport({ ...base, round: 3 })).toMatchObject({ status: "active", title: "Two runs", detail: "Room KQTP" });
+    expect(sittingReport({ ...base, round: 1 })).toMatchObject({ title: "One run, one set" });
   });
 
   it("says when the game is over", () => {

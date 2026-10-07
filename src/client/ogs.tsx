@@ -43,7 +43,7 @@ export function useClaim(): () => Promise<void> {
 }
 
 /**
- * Tells OGS this sitting's label ("Room KQTP", then "Round 3 of 7") whenever it changes: through the
+ * Tells OGS this sitting's label ("Room KQTP", then "Two runs") whenever it changes: through the
  * app bridge inside the OGS app, to the launcher on a framed TV, nowhere in a plain browser.
  * `resume`: report this page's own URL as where to come back to (the phone's, not the TV's).
  */

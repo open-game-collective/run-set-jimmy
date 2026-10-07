@@ -1,5 +1,6 @@
 import { RoomContext } from "../../room.context";
 import { HostPanel, type Hosting } from "./HostPanel";
+import { ROUND_NAMES } from "../../game/round";
 
 /** Lobby: who's at the table, in turn order. The host can match the order to the couch, then deal. */
 export function PhoneLobby({ hosting }: { hosting: Hosting | null }) {
@@ -55,7 +56,7 @@ export function PhoneLobby({ hosting }: { hosting: Hosting | null }) {
       <footer className="phone-foot">
         {isHost ? (
           <button className="btn primary big" disabled={!canStart} onClick={() => send({ type: "START" })}>
-            {canStart ? `Deal round 1 (${seats.length} players)` : "Waiting for one more player"}
+            {canStart ? `Deal ${ROUND_NAMES[0]} (${seats.length} players)` : "Waiting for one more player"}
           </button>
         ) : (
           <p className="muted center-text">{seats[0]?.name ?? "The host"} deals when everyone's in.</p>

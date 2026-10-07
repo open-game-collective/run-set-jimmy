@@ -24,16 +24,19 @@ describe("a table of four", () => {
     await playTable(phones, {
       rounds: 1,
       beat: 30,
-      onMoment: async () => {
-        if (reloaded) return;
+      onMoment: async (name) => {
+        // Mid-round: after someone has gone down or bought (not the cut, before the deal).
+        if (reloaded || !["down", "bought"].includes(name)) return;
         reloaded = true;
         const juniper = phones[1];
         if (!juniper) return;
         before.hand = ((await readView(juniper))?.me?.hand ?? []).map((c) => c.id).sort();
         await juniper.reload();
         await juniper.getByTestId("phone-play").waitFor();
-        const after = ((await readView(juniper))?.me?.hand ?? []).map((c) => c.id).sort();
-        expect(after).toEqual(before.hand);
+        // The page publishes its view a moment after the play screen first renders.
+        await expect
+          .poll(async () => ((await readView(juniper))?.me?.hand ?? []).map((c) => c.id).sort(), { timeout: 5000 })
+          .toEqual(before.hand);
       },
     });
     expect(reloaded).toBe(true);

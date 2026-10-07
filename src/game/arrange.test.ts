@@ -84,3 +84,28 @@ describe("placementsFor", () => {
     ]);
   });
 });
+
+describe("mutation gaps: arrangeRun", () => {
+  it("refuses a repeat at the low end", () => {
+    expect(arrangeRun([c(5), c(5), c(6), c(7)])).toBeNull();
+    expect(arrangeRun([c(5), c(5), c(6), c(7), J()])).toBeNull();
+  });
+
+  it("refuses a third Ace: a run has only two Ace spots", () => {
+    const middle = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((r) => c(r));
+    expect(arrangeRun([c(1), c(1), c(1), ...middle])).toBeNull();
+  });
+
+  it("refuses a spare joker when the run already reaches both Aces", () => {
+    const middle = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((r) => c(r));
+    expect(arrangeRun([c(1), c(1), ...middle, J()])).toBeNull();
+  });
+
+  it("spills the second spare joker once the first reaches the high Ace", () => {
+    expect(shape(arrangeRun([c(11), c(12), c(13), J(), J()]))).toEqual(["J", 11, 12, 13, "J"]);
+  });
+
+  it("spills the second spare joker once the first reaches the low Ace", () => {
+    expect(shape(arrangeRun([c(2), c(3), c(4), J(), J()], "low"))).toEqual(["J", 2, 3, 4, "J"]);
+  });
+});

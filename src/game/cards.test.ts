@@ -126,3 +126,14 @@ describe("shuffle is fair", () => {
     expect([rng(), rng(), rng()].map((x) => x.toFixed(6))).toEqual(["0.627074", "0.002736", "0.527447"]);
   });
 });
+
+describe("mutation gaps: shuffle", () => {
+  it("draws one random number per swap (n - 1), so a seeded deal replays exactly", () => {
+    let calls = 0;
+    shuffle([1, 2, 3, 4], () => {
+      calls++;
+      return 0.5;
+    });
+    expect(calls).toBe(3);
+  });
+});

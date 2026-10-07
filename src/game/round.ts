@@ -86,6 +86,7 @@ function cutDeck(deck: Card[], at: number, cutterHand: Card[] | undefined): { de
   const card = deck[cutAt] as Card;
   const kept = card.kind === "joker";
   if (!kept) return { deck, card, kept };
+  // Stryker disable next-line OptionalChaining: equivalent: the cutter (right of the dealer) is always a seat, so its hand exists
   cutterHand?.push(card);
   return { deck: deck.filter((_, i) => i !== cutAt), card, kept };
 }
@@ -117,6 +118,7 @@ export function deal(opts: { seatIds: readonly string[]; round: number; dealer: 
     round,
     dealer,
     turn: first,
+    // Stryker disable next-line ArrayDeclaration: equivalent: hands has one entry per seat
     seats: seatIds.map((id, i) => ({ id, hand: hands[i] ?? [], down: false, buys: 0 })),
     deck,
     discard: [flipped],
@@ -125,13 +127,16 @@ export function deal(opts: { seatIds: readonly string[]; round: number; dealer: 
     lastDiscarder: null,
     nextMeldId: 1,
     seed: Math.floor(rng() * 2 ** 32),
+    // Stryker disable next-line StringLiteral: equivalent: the cutter is always a seat
     cut: { seat: seatIds[cutter] ?? "", card: cut.card, kept: cut.kept },
   };
 }
 
 const turnSeat = (s: RoundState): Seat => s.seats[s.turn] as Seat;
 const findSeat = (s: RoundState, id: string) => s.seats.find((x) => x.id === id);
+// Stryker disable next-line OptionalChaining,ArrayDeclaration: equivalent: only called for the turn player, who is always seated
 const handOf = (s: RoundState, id: string): Card[] => findSeat(s, id)?.hand ?? [];
+// Stryker disable next-line OptionalChaining: equivalent: requestBuy refuses strangers before asking for their buys
 const buysOf = (s: RoundState, id: string): number => findSeat(s, id)?.buys ?? 0;
 const updateSeat = (s: RoundState, id: string, f: (seat: Seat) => Seat): RoundState => ({
   ...s,
@@ -139,6 +144,7 @@ const updateSeat = (s: RoundState, id: string, f: (seat: Seat) => Seat): RoundSt
 });
 
 /** Is the buy window open (the turn player hasn't drawn and others may still ask to buy)? */
+// Stryker disable next-line ConditionalExpression: equivalent: only draw phases have a window
 export const windowIsOpen = (phase: Phase): boolean => phase.kind === "draw" && phase.window === "open";
 /** Who has asked to buy the discard (only while drawing or during an offer). */
 export const requestsOf = (phase: Phase): readonly string[] => ("requests" in phase ? phase.requests : []);
@@ -147,6 +153,7 @@ export const requestsOf = (phase: Phase): readonly string[] => ("requests" in ph
 function reshuffled(s: RoundState): RoundState | null {
   const top = s.discard.at(-1);
   const rest = s.discard.slice(0, -1);
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent: with nothing to reshuffle the mutant yields an empty deck, and takeTop then returns null all the same
   if (!top || rest.length === 0) return null;
   return { ...s, deck: shuffle(rest, mulberry32(s.seed)), discard: [top], seed: s.seed + 1 };
 }
@@ -188,6 +195,7 @@ function drawRefusal(phase: Phase, from: "deck" | "discard"): string | null {
   return firstBroken([
     [() => phase.kind === "play", "You already drew this turn"],
     [() => phase.kind === "offer", "Someone wants to buy the discard: take it or let it go"],
+    // Stryker disable next-line ArrowFunction,ConditionalExpression,StringLiteral: equivalent: unreachable; turnCheck refuses "out" and the rules above refuse play and offer, so the phase is draw
     [() => phase.kind !== "draw", "You can't draw now"],
     [() => from === "deck" && windowIsOpen(phase), "Wait for the buy window to close, or take the discard"],
   ]);
@@ -215,6 +223,7 @@ export function requestBuy(s: RoundState, seatId: string): Result {
 }
 
 export function closeBuyWindow(s: RoundState): Result {
+  // Stryker disable next-line ConditionalExpression: equivalent: only draw phases have a window
   if (s.phase.kind !== "draw" || s.phase.window !== "open") return fail("No buy window is open");
   const { requests } = s.phase;
   return done({
@@ -226,6 +235,7 @@ export function closeBuyWindow(s: RoundState): Result {
 /** The requester closest after the turn player. */
 function firstBuyer(s: RoundState, requests: readonly string[]): Seat | undefined {
   const count = s.seats.length;
+  // Stryker disable next-line ArithmeticOperator: equivalent: the extra candidates are the turn player (who can never request) and a repeat
   return Array.from({ length: count - 1 }, (_, k) => s.seats[(s.turn + 1 + k) % count] as Seat).find((x) =>
     requests.includes(x.id),
   );
@@ -235,6 +245,7 @@ function firstBuyer(s: RoundState, requests: readonly string[]): Seat | undefine
 function sellTop(s: RoundState, buyerId: string, top: Card): RoundState {
   const rest = { ...s, discard: s.discard.slice(0, -1) };
   const taken = takeFromDeck(rest);
+  // Stryker disable next-line ArrayDeclaration: equivalent: no card to add means deck and discard are empty, so the turn player's draw fails and the whole answer is refused
   const bought = taken ? [top, taken.card] : [top];
   return updateSeat(taken ? taken.state : rest, buyerId, (x) => ({ ...x, hand: [...x.hand, ...bought], buys: x.buys + 1 }));
 }
@@ -267,6 +278,7 @@ export function canPlayAnywhere(card: Card, melds: readonly TableMeld[]): boolea
 
 /** A one-card hand whose card has nowhere to go on the table. */
 const strandedLastCard = (hand: readonly Card[], melds: readonly TableMeld[]) =>
+  // Stryker disable next-line MethodExpression: equivalent: the hand holds exactly one card
   hand.length === 1 && hand.every((c) => !canPlayAnywhere(c, melds));
 
 /** After plays a hand is empty (out), or 2+ cards, or 1 card that can still be played. */

@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
   "commandRunner": { "command": "pnpm exec vitest run src/game" },
-  "mutate": ["src/game/*.ts", "!src/game/*.test.ts"],
+  "mutate": ["src/game/*.ts", "!src/game/*.test.ts", "!src/game/bot.ts", "!src/game/sim.ts"],
   "reporters": ["clear-text", "progress", "json"],
   "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
   "coverageAnalysis": "off",

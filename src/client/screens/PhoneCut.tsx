@@ -33,7 +33,7 @@ export function PhoneCut() {
             }}
           >
             {Array.from({ length: 18 }, (_, i) => (
-              <CardBack key={i} style={{ left: `${(i / 17) * 78}%` }} />
+              <CardBack key={i} style={{ left: `calc((100% - 70px) * ${i / 17})` }} />
             ))}
           </div>
         </>

@@ -50,9 +50,10 @@ const PHONE_CHECKS = `(() => {
   const label = (e) => (e.getAttribute("aria-label") || e.textContent || e.className || e.tagName).trim().slice(0, 40);
   if (document.documentElement.scrollWidth > vw + 1) issues.push("the page scrolls sideways (" + document.documentElement.scrollWidth + " > " + vw + ")");
   const must = ['[data-testid=turn-banner]', '[data-testid=actions] button', '[data-testid=hand-card]', '.hand-tools button', '.phone-foot .btn', '.sheet button', '[data-testid=builder] .slot', '[data-testid=cut-deck]', '[data-testid=lobby-seat]'];
+  const fixed = !!document.querySelector(".phone.play");
   for (const sel of must) for (const e of shown(sel)) {
     const r = e.getBoundingClientRect();
-    if (r.left < -1 || r.right > vw + 1 || r.top < -1 || r.bottom > vh + 1) issues.push("off screen: " + sel + " (" + label(e) + ") at " + [r.left, r.top, r.right, r.bottom].map(Math.round).join(","));
+    if (r.left < -1 || r.right > vw + 1 || (fixed && (r.top < -1 || r.bottom > vh + 1))) issues.push("off screen: " + sel + " (" + label(e) + ") at " + [r.left, r.top, r.right, r.bottom].map(Math.round).join(","));
   }
   for (const b of shown("button")) {
     const r = b.getBoundingClientRect();
@@ -72,7 +73,7 @@ const PHONE_CHECKS = `(() => {
     const w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
     if (w > 2 && h > 2) { issues.push("hand cards overlap"); i = cards.length; break; }
   }
-  for (const e of shown(".card .corner b")) { const r = e.getBoundingClientRect(); if (r.height < 9) { issues.push("card rank too small to read (" + Math.round(r.height) + "px)"); break; } }
+  for (const e of shown(".card .corner b")) { const px = parseFloat(getComputedStyle(e).fontSize); if (px < 10) { issues.push("card rank too small to read (" + px.toFixed(1) + "px font)"); break; } }
   return issues;
 })()`;
 
@@ -86,14 +87,16 @@ const TV_CHECKS = `(() => {
   if (!stage) return ["no stage"];
   const leaves = [...stage.querySelectorAll("*")].filter((e) => e.children.length === 0 && !e.closest(".lamp") && !["SVG", "svg"].includes(e.tagName));
   let outside = 0, inCorner = 0;
+  const who = (e) => (e.className && typeof e.className === "string" ? "." + e.className.split(" ")[0] : e.tagName) + "<" + (e.parentElement?.className || "").toString().split(" ")[0] + ">";
+  const outNames = new Set(), cornerNames = new Set();
   for (const e of leaves) {
     const r = e.getBoundingClientRect();
     if (r.width < 1 || r.height < 1 || getComputedStyle(e).visibility === "hidden") continue;
-    if (r.left < safe.left - 1 || r.top < safe.top - 1 || r.right > safe.right + 1 || r.bottom > safe.bottom + 1) outside++;
-    if (r.right > corner.left && r.left < corner.right && r.bottom > corner.top && r.top < corner.bottom) inCorner++;
+    if (r.left < safe.left - 1 || r.top < safe.top - 1 || r.right > safe.right + 1 || r.bottom > safe.bottom + 1) { outside++; outNames.add(who(e)); }
+    if (r.right > corner.left && r.left < corner.right && r.bottom > corner.top && r.top < corner.bottom) { inCorner++; cornerNames.add(who(e)); }
   }
-  if (outside) issues.push(outside + " elements outside the 5% safe area");
-  if (inCorner) issues.push(inCorner + " elements in the OGS invite corner (top-right)");
+  if (outside) issues.push("outside the 5% safe area: " + [...outNames].slice(0, 4).join(" "));
+  if (inCorner) issues.push("in the OGS invite corner (top-right): " + [...cornerNames].slice(0, 4).join(" "));
   const regions = ['.round-banner', '.pile', '.table', '.ticker', '.seats', '.scoreboard', '.tv-cutting', '.tv-lobby'].map((x) => [x, document.querySelector(x)]).filter(([, e]) => e);
   for (let i = 0; i < regions.length; i++) for (let j = i + 1; j < regions.length; j++) {
     const a = regions[i][1].getBoundingClientRect(), b = regions[j][1].getBoundingClientRect();

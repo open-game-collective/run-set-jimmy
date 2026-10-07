@@ -212,9 +212,10 @@ button { font: inherit; color: inherit; }
 .stage .card { --w: 92px; }
 
 /* Lobby */
-.tv-lobby { position: absolute; left: 96px; right: 96px; top: 120px; text-align: center; }
-.tv-lobby .tagline { font-family: var(--display); font-style: italic; font-size: 40px; color: var(--brass-hi); margin: 14px 0 50px; }
-.lobby-row { display: flex; gap: 60px; justify-content: center; align-items: center; }
+.tv-lobby { position: absolute; left: 96px; right: 96px; top: 96px; text-align: left; }
+.tv-lobby .wordmark.big { justify-content: flex-start; font-size: 132px; }
+.tv-lobby .tagline { font-family: var(--display); font-style: italic; font-size: 40px; color: var(--brass-hi); margin: 14px 0 50px; width: fit-content; }
+.lobby-row { display: flex; gap: 60px; justify-content: flex-start; align-items: center; }
 .join-card {
   display: flex;
   gap: 28px;
@@ -318,7 +319,8 @@ button { font: inherit; color: inherit; }
   justify-content: center;
 }
 .seat {
-  flex: 0 1 240px;
+  flex: 0 1 auto;
+  max-width: 360px;
   display: flex;
   gap: 14px;
   align-items: center;
@@ -350,7 +352,7 @@ button { font: inherit; color: inherit; }
 .dealer {
   position: absolute;
   right: -8px;
-  bottom: -6px;
+  bottom: 0;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -370,8 +372,11 @@ button { font: inherit; color: inherit; }
 .buys { display: inline-flex; gap: 4px; }
 .buys i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--brass); }
 .buys i.used { background: var(--brass); }
-.seats.n6 .seat, .seats.n7 .seat { flex-basis: 220px; padding: 12px; }
-.seats.n7 .seat-disc { width: 60px; height: 60px; font-size: 22px; }
+.seats.n5 .seat, .seats.n6 .seat, .seats.n7 .seat { flex: 1 1 0; min-width: 0; padding: 12px; gap: 10px; }
+.seats.n6 .seat-meta, .seats.n7 .seat-meta { flex-wrap: wrap; row-gap: 2px; }
+.seats.n6 .seat-name, .seats.n7 .seat-name { font-size: 22px; }
+.seats.n6 .seat-meta, .seats.n7 .seat-meta { font-size: 16px; gap: 6px; }
+.seats.n6 .seat-disc, .seats.n7 .seat-disc { width: 56px; height: 56px; font-size: 21px; }
 
 /* Scoreboard */
 .scoreboard { position: absolute; left: 96px; right: 96px; top: 300px; bottom: 230px; text-align: center; }
@@ -434,7 +439,7 @@ button { font: inherit; color: inherit; }
 .seat-label { flex: 1; font-size: 18px; font-weight: 600; display: flex; flex-direction: column; }
 .seat-label small { font-size: 12px; color: var(--brass); font-weight: 400; }
 .seat-tools { display: flex; gap: 6px; }
-.seat-tools button { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--brass-lo); background: transparent; font-size: 18px; }
+.seat-tools button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--brass-lo); background: transparent; font-size: 18px; }
 .seat-tools button:disabled { opacity: 0.3; }
 .host-panel { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: 16px; background: rgba(6, 26, 24, 0.5); border: 1px solid rgba(201, 162, 74, 0.3); }
 .host-join { display: flex; gap: 14px; align-items: center; }
@@ -464,10 +469,11 @@ button { font: inherit; color: inherit; }
 }
 .turn-banner.mine { background: linear-gradient(180deg, var(--brass-hi), var(--brass)); color: var(--ink); animation: rise 260ms ease-out; }
 @media (max-height: 700px) {
-  .play .card.mini { --w: 30px; }
+  .play .card.mini { --w: 40px; }
   .play-head .req { font-size: 18px; }
   .hand-card .card { --w: min(42px, calc((100vw - 52px) / 7)); }
   .actions .btn { min-height: 46px; padding: 10px 12px; }
+  .actions { max-height: 40dvh; }
 }
 .play-head { display: flex; justify-content: space-between; align-items: center; }
 .play .req { font-family: var(--display); font-size: 22px; font-weight: 700; margin: 2px 0 0; }
@@ -483,7 +489,7 @@ button { font: inherit; color: inherit; }
   font-size: 13px;
   font-weight: 700;
 }
-.play .card.mini { --w: 36px; }
+.play .card.mini { --w: 40px; }
 .phone-table { flex: 1; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .phone-owner .owner-name { margin: 0 0 4px; font-size: 13px; color: var(--brass); font-weight: 700; }
 .phone-melds { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -493,7 +499,7 @@ button { font: inherit; color: inherit; }
 .phone-meld:disabled { opacity: 1; }
 @keyframes glow { 50% { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 28px rgba(236, 208, 138, 0.8); } }
 
-.actions { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+.actions { display: flex; flex-direction: column; gap: 8px; min-height: 60px; max-height: 46dvh; overflow-y: auto; }
 .actions .row { display: flex; gap: 8px; }
 .actions .row .btn { flex: 1; }
 .actions .status { margin: 0; text-align: center; font-size: 17px; color: var(--muted); padding: 16px 0; }
@@ -504,6 +510,8 @@ button { font: inherit; color: inherit; }
 
 .builder { display: flex; flex-direction: column; gap: 8px; }
 .builder-help { margin: 0; font-size: 14px; color: var(--muted); text-align: center; }
+/* Cancel / Lay down stay reachable however many boxes the round has. */
+.builder > .row { position: sticky; bottom: 0; padding-top: 6px; background: linear-gradient(180deg, transparent, var(--felt-deep) 30%); }
 .builder-help b { color: var(--brass-hi); }
 .slots { display: flex; flex-direction: column; gap: 6px; }
 .slot { border: 1.5px dashed rgba(201, 162, 74, 0.5); border-radius: 12px; padding: 8px; min-height: 64px; }
@@ -513,13 +521,13 @@ button { font: inherit; color: inherit; }
 .slot-label span { font-weight: 400; color: var(--muted); }
 .slot.ok .slot-label span { color: #a8e0b5; }
 .slot-cards { display: flex; flex-wrap: wrap; gap: 3px; }
-.slot-cards .card.tiny { --w: 30px; }
+.slot-cards .card.tiny { --w: 40px; }
 .spare { margin-top: 6px; border: 1px solid var(--brass-lo); background: transparent; border-radius: 8px; padding: 4px 8px; font-size: 13px; }
 
 .hand-wrap { display: flex; flex-direction: column; gap: 6px; }
 .hand-tools { display: flex; gap: 8px; align-items: center; }
 .hand-tools .kicker { flex: 1; }
-.hand-tools button { border: 1px solid var(--brass-lo); background: transparent; border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.hand-tools button { border: 1px solid var(--brass-lo); background: transparent; border-radius: 999px; padding: 0 14px; min-height: 40px; font-size: 14px; }
 .hand { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px 4px; touch-action: none; }
 .hand.n15, .hand.n16, .hand.n17, .hand.n18, .hand.n19, .hand.n20 { grid-template-columns: repeat(8, 1fr); }
 .hand-card { position: relative; transition: transform 140ms ease-out; touch-action: none; }
@@ -586,6 +594,48 @@ button { font: inherit; color: inherit; }
 .standings li span:first-child { flex: 1; }
 .standings .round-pts { color: var(--muted); }
 .standings b { font-family: var(--display); font-size: 24px; min-width: 50px; text-align: right; }
+
+/* Tablets: a centred column with bigger cards, not a stretched phone. */
+@media (min-width: 600px) and (min-height: 600px) {
+  .phone { max-width: 640px; margin: 0 auto; }
+  .hand { grid-template-columns: repeat(8, 1fr); gap: 10px 6px; }
+  .hand-card .card, .hand.n15 .hand-card .card, .hand.n16 .hand-card .card, .hand.n17 .hand-card .card, .hand.n18 .hand-card .card,
+  .hand.n19 .hand-card .card, .hand.n20 .hand-card .card { --w: 66px; }
+  .phone-meld .card { --w: 54px; }
+  .play .card.mini { --w: 48px; }
+  .slot-cards .card.tiny { --w: 48px; }
+  .turn-banner { font-size: 19px; }
+  .play .req { font-size: 26px; }
+}
+
+/* Very narrow phones (Galaxy Fold, 280 px): six cards a row so ranks stay readable. */
+@media (max-width: 339px) {
+  .hand { grid-template-columns: repeat(6, 1fr) !important; }
+  .hand-card .card, .hand.n15 .hand-card .card, .hand.n16 .hand-card .card, .hand.n17 .hand-card .card, .hand.n18 .hand-card .card,
+  .hand.n19 .hand-card .card, .hand.n20 .hand-card .card { --w: calc((100vw - 48px) / 6); }
+  .phone { padding-left: 10px; padding-right: 10px; }
+  .actions .btn { font-size: 14px; padding: 8px; }
+}
+
+/* Phones on their side: the table on the left; the turn, the actions and the hand on the right. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .phone.play {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "head banner" "table hand" "actions hand";
+    column-gap: 14px;
+    align-content: start;
+  }
+  .play > .play-head { grid-area: head; }
+  .play > .turn-banner { grid-area: banner; }
+  .play > .phone-table { grid-area: table; }
+  .play > .actions { grid-area: actions; max-height: 62dvh; overflow-y: auto; }
+  .play > .hand-wrap { grid-area: hand; overflow-y: auto; min-height: 0; }
+  .play .hand { grid-template-columns: repeat(8, 1fr); }
+  .play .hand-card .card { --w: min(40px, calc((50vw - 60px) / 8)); }
+  .play .actions .btn { min-height: 44px; padding: 8px 10px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

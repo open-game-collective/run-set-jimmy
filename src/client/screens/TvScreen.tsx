@@ -67,7 +67,7 @@ export function TvScreen({ joinUrl }: { joinUrl: string }) {
               </>
             ) : null}
             {phase === "roundOver" || phase === "gameOver" ? <Scoreboard pub={pub} final={phase === "gameOver"} /> : null}
-            <Ticker log={pub.log} />
+            {phase === "playing" || phase === "cutting" ? <Ticker log={pub.log} /> : null}
           </>
         )}
         <Seats pub={pub} />

@@ -11,7 +11,8 @@
     "test:mutate": "stryker run",
     "deploy": "wrangler deploy",
     "record": "tsx e2e/record-game.ts",
-    "dev:seam": "wrangler dev --port 8798 --persist-to .wrangler/seam-state --var OGS_JWKS_URL:http://localhost:8831/.well-known/jwks.json"
+    "dev:seam": "wrangler dev --port 8798 --persist-to .wrangler/seam-state --var OGS_JWKS_URL:http://localhost:8831/.well-known/jwks.json",
+    "devices": "tsx e2e/devices.ts"
   },
   "dependencies": {
     "@open-game-system/cast-kit-core": "file:vendor/open-game-system-cast-kit-core-0.2.0.tgz",

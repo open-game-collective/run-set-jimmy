@@ -91,6 +91,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
       continue;
     }
     if (state === "cutting") {
+      await opts.onMoment?.("cutting", v0);
       const cutter = views.findIndex((v) => v?.me?.mustCut);
       const page = phones[cutter];
       if (page) {
@@ -131,6 +132,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
     const turnPage = phones[turnIndex];
     if (turnView && turnPage) {
       const action = decide(turnView);
+      if (turnView.pub.turnPhase === "play") await opts.onMoment?.("turn-play", turnView);
       if (action) {
         await wait(beat);
         await perform(turnPage, turnView, action, beat).catch((e: unknown) => {

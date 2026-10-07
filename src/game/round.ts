@@ -138,7 +138,8 @@ const updateSeat = (s: RoundState, id: string, f: (seat: Seat) => Seat): RoundSt
   seats: s.seats.map((x) => (x.id === id ? f(x) : x)),
 });
 
-const windowIsOpen = (phase: Phase) => phase.kind === "draw" && phase.window === "open";
+/** Is the buy window open (the turn player hasn't drawn and others may still ask to buy)? */
+export const windowIsOpen = (phase: Phase): boolean => phase.kind === "draw" && phase.window === "open";
 const requestsOf = (phase: Phase): readonly string[] => ("requests" in phase ? phase.requests : []);
 
 /** The discards (all but the top) shuffled into a fresh deck; null when there are none to shuffle. */

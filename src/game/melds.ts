@@ -22,7 +22,7 @@ const fail = (reason: string): { ok: false; reason: string } => ({ ok: false, re
 const naturals = (cards: readonly Card[]): Natural[] => cards.filter((c): c is Natural => c.kind === "card");
 
 /** Does this card's rank fill the run value `value` (1–14)? An Ace fills 1 and 14. */
-const fills = (card: Natural, value: number) => card.rank === value || (card.rank === 1 && value === HIGHEST);
+export const fills = (card: Natural, value: number) => card.rank === value || (card.rank === 1 && value === HIGHEST);
 
 export const runHigh = (run: RunMeld): number => run.low + run.cards.length - 1;
 

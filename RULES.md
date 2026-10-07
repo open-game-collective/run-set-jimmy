@@ -33,8 +33,9 @@ Two jokers per deck in play. Duplicate cards (e.g. two 7♥) are normal.
   is one more of that rank.
 - **Slide rule:** jokers can never be taken back into a hand. When someone plays the real card a
   joker stands for (the 6♥ above), the real card takes that spot and the joker moves to either end
-  of the run (4♥ or 9♥), chosen by the player who played the card. If neither end is open (A…A),
-  the joker stays where it is. In a set, adding cards never moves a joker.
+  of the run (4♥ or 9♥), chosen by the player who played the card. The chosen end must be open:
+  if the run already reaches the Ace at both ends, the joker can't be replaced. In a set, adding
+  cards never moves a joker.
 - Jokers may be discarded.
 
 ## Rounds
@@ -74,6 +75,8 @@ draw to 12, go down with three 4-card runs, out.)
 - **You can never discard your last card.** After discarding you always hold at least 1 card. When
   you're down to 1 card, you draw to 2. If both play, you're out. If not, you play none, discard
   one and hold the other.
+- So your plays may leave you holding a single card only if that card can still be played onto
+  the table; otherwise keep 2 and discard one.
 - If you go out, the turn ends without a discard, and so does the round.
 
 ## Buying
@@ -111,7 +114,7 @@ win.**
 - Once you're down, cards that fit a meld on the table are highlighted.
 - No automatic go-down suggestions.
 
-## Assumptions (confirm or correct)
+## Also (confirmed 2026-10-07)
 - You must draw before going down or playing.
 - You may only play cards during your own turn (buying is the only out-of-turn action).
 - Players who are already down may still buy.

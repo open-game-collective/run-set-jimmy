@@ -23,8 +23,8 @@ function OgsTvPage({ tvUrl }: { tvUrl: string }) {
 }
 
 /**
- * Keeps declaring this phone's TV page after the lobby (and for a phone that joined another
- * household's room, OGS multiCouch): inside the OGS app only.
+ * Inside the OGS app, every phone that started its couch's TV (/host, with ?tv=) declares that TV
+ * page: the room's host, and another couch's host joining it (multiCouch).
  */
 export function OwnTvPage({ hosting }: { hosting: Hosting }) {
   const inOgs = useMemo(() => isOGSCastAvailable(), []);
@@ -38,7 +38,7 @@ export function OwnTvPage({ hosting }: { hosting: Hosting }) {
 
 /**
  * The host phone's lobby extras: room code and QR for the other players, and (outside the OGS app) a
- * link to open the TV page on a laptop. Inside the OGS app, the app casts; this only declares the TV page.
+ * link to open the TV page on a laptop. Inside the OGS app, the app casts (OwnTvPage declares the page).
  */
 export function HostPanel({ hosting }: { hosting: Hosting }) {
   const code = RoomContext.useSelector((s) => s.public.roomCode);
@@ -47,11 +47,6 @@ export function HostPanel({ hosting }: { hosting: Hosting }) {
   const qr = useMemo(() => qrDataUrl(hosting.joinUrl), [hosting.joinUrl]);
   return (
     <>
-      {inOgs && (
-        <CastProvider>
-          <OgsTvPage tvUrl={hosting.tvUrl} />
-        </CastProvider>
-      )}
       {(!inOgs || open) && (
         <div className="host-panel">
           {!inOgs && (

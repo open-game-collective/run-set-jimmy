@@ -12,6 +12,7 @@ import { chromium, type Browser, type Frame, type Page } from "playwright";
 import { afterAll, describe, expect, it } from "vitest";
 import { gameClaims } from "../src/test/ogsTestKeys";
 import { ogsSeamKey } from "./ogs-jwks";
+import { playTable } from "./table";
 
 const BASE = process.env.GAME_URL ?? "http://localhost:8798";
 const APP = "run-set-jimmy";
@@ -217,5 +218,13 @@ describe("several couches, one room (multiCouch)", () => {
       .toEqual(["Jonathan@Jonathan", "Juniper@Jonathan", "Rosa@Rosa", "Theo@Rosa"]);
     const bView = async () => (await b1.sent()).find((m) => m.event?.type === "SET_VIEW_URL")?.event?.url ?? "";
     await expect.poll(bView, { timeout: 10_000 }).toMatch(new RegExp(`/tv/${code}\\?t=`));
-  }, 60_000);
+
+    // Each couch has its own TV on the room; the four phones play a whole round together.
+    const tvB = await (await (await browserP).newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+    await tvB.goto(await bView());
+    await tvB.getByTestId("seats").waitFor();
+    const result = await playTable([a1.page, a2.page, b1.page, b2.page], { rounds: 1, beat: 30 });
+    expect(result.rounds).toBe(1);
+    await tvB.getByTestId("scoreboard").waitFor();
+  }, 240_000);
 });

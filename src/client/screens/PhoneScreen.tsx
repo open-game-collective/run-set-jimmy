@@ -154,7 +154,7 @@ export function PhoneScreen() {
     );
   return (
     <>
-      {hosting && value !== "lobby" ? <OwnTvPage hosting={hosting} /> : null}
+      {hosting ? <OwnTvPage hosting={hosting} /> : null}
       {body}
     </>
   );

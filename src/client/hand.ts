@@ -1,6 +1,7 @@
 import { arrangeRun } from "../game/arrange";
-import type { Card } from "../game/cards";
+import type { Card, Natural } from "../game/cards";
 import { readRun, readSet, runHigh, type RunMeld, type RunPlacement } from "../game/melds";
+import { firstBroken } from "../game/refusal";
 import type { MeldProposal, Requirement } from "../game/round";
 import { rankName, rankPlural, suitSymbol } from "../game/words";
 
@@ -49,26 +50,59 @@ export function builderSlots(req: Requirement): Slot[] {
 
 const COUNT_WORDS = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
 
-/** Whether a builder slot is ready to lay down, and a short line saying what it is or what's missing. */
-export function slotStatus(kind: "run" | "set", cards: readonly Card[], spare: "high" | "low" = "high"): { ok: boolean; line: string } {
-  const min = kind === "run" ? 4 : 3;
-  if (cards.length === 0) return { ok: false, line: "Tap cards to add" };
-  const naturals = cards.filter((c) => c.kind === "card");
-  if (kind === "set") {
-    const rank = naturals[0]?.kind === "card" ? naturals[0].rank : null;
-    if (naturals.some((c) => c.kind === "card" && c.rank !== rank)) return { ok: false, line: "Same rank only" };
-    if (cards.length < min) return { ok: false, line: `${min - cards.length} more card${min - cards.length === 1 ? "" : "s"}` };
-    if (!readSet(cards).ok || rank === null) return { ok: false, line: "Needs a real card" };
-    return { ok: true, line: `${COUNT_WORDS[cards.length] ?? cards.length} ${rankPlural(rank)}` };
-  }
-  const suit = naturals[0]?.kind === "card" ? naturals[0].suit : null;
-  if (naturals.some((c) => c.kind === "card" && c.suit !== suit)) return { ok: false, line: "One suit only" };
-  if (cards.length < min) return { ok: false, line: `${min - cards.length} more card${min - cards.length === 1 ? "" : "s"}` };
+type SlotStatus = { ok: boolean; line: string };
+
+const no = (line: string): SlotStatus => ({ ok: false, line });
+const moreCards = (missing: number) => `${missing} more card${missing === 1 ? "" : "s"}`;
+const countWord = (n: number) => COUNT_WORDS[n] ?? String(n);
+const naturalsIn = (cards: readonly Card[]) => cards.filter((c): c is Natural => c.kind === "card");
+
+/** Mixed ranks, or too few cards, for a set. */
+function setProblem(cards: readonly Card[], naturals: readonly Natural[]): string | null {
+  return firstBroken([
+    [() => naturals.some((c) => c.rank !== naturals[0]?.rank), "Same rank only"],
+    [() => cards.length < 3, moreCards(3 - cards.length)],
+  ]);
+}
+
+function setStatus(cards: readonly Card[]): SlotStatus {
+  const naturals = naturalsIn(cards);
+  const first = naturals[0];
+  const problem = setProblem(cards, naturals);
+  if (problem) return no(problem);
+  if (!first || !readSet(cards).ok) return no("Needs a real card");
+  return { ok: true, line: `${countWord(cards.length)} ${rankPlural(first.rank)}` };
+}
+
+/** Mixed suits, or too few cards, for a run. */
+function runProblem(cards: readonly Card[], naturals: readonly Natural[]): string | null {
+  return firstBroken([
+    [() => naturals.some((c) => c.suit !== naturals[0]?.suit), "One suit only"],
+    [() => cards.length < 4, moreCards(4 - cards.length)],
+  ]);
+}
+
+/** The run these cards make, as laid out or arranged (jokers filling the gaps); null if none. */
+function slotRun(cards: readonly Card[], spare: "high" | "low"): RunMeld | null {
   const arranged = readRun(cards).ok ? [...cards] : arrangeRun(cards, spare);
   const run = arranged ? readRun(arranged) : null;
-  if (!run?.ok || !suit) return { ok: false, line: naturals.length === 0 ? "Needs a real card" : "Not in a row" };
-  const s = suitSymbol(run.meld.suit);
-  return { ok: true, line: `${rankName(run.meld.low)}${s} to ${rankName(runHigh(run.meld))}${s}` };
+  return run?.ok ? run.meld : null;
+}
+
+function runStatus(cards: readonly Card[], spare: "high" | "low"): SlotStatus {
+  const naturals = naturalsIn(cards);
+  const problem = runProblem(cards, naturals);
+  if (problem) return no(problem);
+  const run = slotRun(cards, spare);
+  if (!run) return no(naturals.length === 0 ? "Needs a real card" : "Not in a row");
+  const s = suitSymbol(run.suit);
+  return { ok: true, line: `${rankName(run.low)}${s} to ${rankName(runHigh(run))}${s}` };
+}
+
+/** Whether a builder slot is ready to lay down, and a short line saying what it is or what's missing. */
+export function slotStatus(kind: "run" | "set", cards: readonly Card[], spare: "high" | "low" = "high"): SlotStatus {
+  if (cards.length === 0) return no("Tap cards to add");
+  return kind === "set" ? setStatus(cards) : runStatus(cards, spare);
 }
 
 export const toProposals = (slots: readonly Slot[]): MeldProposal[] =>

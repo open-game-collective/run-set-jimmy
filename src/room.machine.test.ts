@@ -102,6 +102,24 @@ describe("OGS identities", () => {
     expect(pub(room).seats[0]).toMatchObject({ name: "Grandma Jo", avatar: "https://x/a.png" });
   });
 
+  it("a claim that arrives after the phone took its seat renames that seat (still unique) and sets its avatar", () => {
+    const room = createTestActor();
+    send(room, ANN, { type: "JOIN", name: "Typed" });
+    send(room, BEN, { type: "JOIN", name: "Grandma Jo" });
+    claim(room, ANN, { profileId: "p1", name: "Grandma Jo", avatar: "https://x/a.png", couch: null });
+    expect(pub(room).seats[0]).toMatchObject({ name: "Grandma Jo 2", avatar: "https://x/a.png" });
+    expect(pub(room).seats[1]?.name).toBe("Grandma Jo");
+  });
+
+  it("a late claim with no avatar clears the seat's picture; a claim for nobody seated changes no seat", () => {
+    const room = createTestActor();
+    claim(room, ANN, { profileId: "p1", name: "Ann", avatar: "https://x/a.png", couch: null });
+    send(room, ANN, { type: "JOIN" });
+    claim(room, ANN, { profileId: "p1", name: "Ann", avatar: "", couch: null });
+    claim(room, CAT, { profileId: "p3", name: "Cat", avatar: "https://x/c.png", couch: null });
+    expect(pub(room).seats).toEqual([expect.objectContaining({ name: "Ann", avatar: null })]);
+  });
+
   it("only the OGS service may claim", () => {
     const room = createTestActor();
     snap(room); // the TV can't send OGS_CLAIM: it isn't a client event at all (schema), nothing to test there
@@ -163,6 +181,13 @@ describe("several couches (OGS multiCouch)", () => {
     expect(value(room)).toBe("playing.window");
     send(room, tvB, { type: "AWAY", away: false });
     expect(pub(room).households[1]?.away).toBe(false);
+  });
+
+  it("a known household takes the label of its latest claim", () => {
+    const room = twoCouches();
+    claim(room, "tv-b", { profileId: "h2", name: "Sam", avatar: "", couch: { sid: "couch-b", label: "Sam's place" } });
+    expect(pub(room).households[1]?.label).toBe("Sam's place");
+    expect(pub(room).seats.map((s) => s.couch)).toEqual(["Jonathan", "Jonathan", "Sam's place", "Sam's place"]);
   });
 
   it("plays a whole round across two couches", () => {

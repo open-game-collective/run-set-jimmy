@@ -15,8 +15,8 @@ export type ClaimDeps = {
   send: (roomCode: string, event: { type: "OGS_CLAIM"; callerId: string; claim: OgsClaim }) => Promise<void>;
 };
 
-export async function ogsClaim(req: Request, roomCode: string, deps: ClaimDeps): Promise<Response> {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+/** The posted `{ t, token }`, or the response refusing a body that isn't one. */
+async function readBody(req: Request): Promise<z.infer<typeof BodySchema> | Response> {
   let raw: unknown;
   try {
     raw = await req.json();
@@ -24,14 +24,24 @@ export async function ogsClaim(req: Request, roomCode: string, deps: ClaimDeps):
     return new Response("expected JSON", { status: 400 });
   }
   const body = BodySchema.safeParse(raw);
-  if (!body.success) return new Response("expected { t, token }", { status: 400 });
-  const claims = await deps.verify(body.data.token);
+  return body.success ? body.data : new Response("expected { t, token }", { status: 400 });
+}
+
+/** What the room learns from a verified token. */
+const claimFrom = (claims: GameToken): OgsClaim => ({
+  profileId: claims.sub,
+  name: claims.name,
+  avatar: claims.avatar,
+  couch: claims.couch ?? null,
+});
+
+export async function ogsClaim(req: Request, roomCode: string, deps: ClaimDeps): Promise<Response> {
+  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  const body = await readBody(req);
+  if (body instanceof Response) return body;
+  const claims = await deps.verify(body.token);
   if (!claims) return new Response("token did not verify", { status: 401 });
-  await deps.send(roomCode, {
-    type: "OGS_CLAIM",
-    callerId: body.data.t,
-    claim: { profileId: claims.sub, name: claims.name, avatar: claims.avatar, couch: claims.couch ?? null },
-  });
+  await deps.send(roomCode, { type: "OGS_CLAIM", callerId: body.t, claim: claimFrom(claims) });
   return new Response(null, { status: 204 });
 }
 

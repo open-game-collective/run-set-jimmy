@@ -11,7 +11,6 @@ import { applyOrder, builderSlots, placementLabel, slotStatus, sortHand, toPropo
 import { haptic } from "../haptics";
 import { sounds } from "../sound";
 import { Hand } from "./Hand";
-import { RoundPips } from "../RoundPips";
 import { turnLine } from "../turn-line";
 
 type MeldView = RoomPublicContext["melds"][number];
@@ -159,7 +158,7 @@ export function PhonePlay() {
       <Toast />
       <header className="play-head">
         <div>
-          <RoundPips round={pub.round} />
+          <p className="kicker">Round {pub.round} of 7</p>
           <p className="req" data-testid="phone-requirement">
             {req?.name}
           </p>

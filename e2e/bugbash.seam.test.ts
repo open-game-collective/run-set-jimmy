@@ -23,7 +23,7 @@ beforeAll(async () => {
     phones.push(await (await browser.newContext({ ...opts, viewport })).newPage());
   }
   await seatPlayers(phones, code);
-  await phones[0]?.getByRole("button", { name: /^Deal One run, one set/ }).click();
+  await phones[0]?.getByRole("button", { name: /^Deal round 1/ }).click();
   const cutter = phones[3];
   await cutter?.getByTestId("cut-deck").click();
   await phones[1]?.getByTestId("phone-play").waitFor();

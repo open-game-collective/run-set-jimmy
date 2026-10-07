@@ -57,7 +57,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
   const host = phones[0];
   if (!host) throw new Error("no phones");
   if (opts.waitForSeats) await host.getByTestId("lobby-seat").nth(opts.waitForSeats - 1).waitFor({ timeout: 0 });
-  await host.getByRole("button", { name: /^Deal One run, one set/ }).click();
+  await host.getByRole("button", { name: /^Deal round 1/ }).click();
   for (;;) {
     const views = await Promise.all(phones.map(readView));
     const v0 = views[0];
@@ -85,7 +85,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
       await opts.onMoment?.("roundOver", v0);
       if (opts.rounds !== undefined && v0.pub.scores.length >= opts.rounds) return { rounds: v0.pub.scores.length, actions };
       await wait(beat * 6);
-      await host.getByRole("button", { name: /^Deal / }).click();
+      await host.getByRole("button", { name: /^Deal round/ }).click();
       // Wait for the host's own view to leave the scores, so a stale view can't deal twice.
       for (let t = 0; t < 100 && stateName((await readView(host))?.value ?? "roundOver") === "roundOver"; t++) await wait(60);
       continue;

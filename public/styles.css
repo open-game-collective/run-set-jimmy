@@ -238,12 +238,7 @@ button { font: inherit; color: inherit; }
 .round-banner { position: absolute; left: 96px; top: 54px; width: 1200px; }
 .round-banner .wordmark { font-size: 30px; opacity: 0.9; }
 .round-of { font-family: var(--display); font-size: 34px; margin: 18px 0 0; color: var(--brass-hi); }
-.round-pips { display: inline-flex; gap: 8px; align-items: center; }
-.round-pips i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--brass); }
-.round-pips i.done { background: var(--brass); }
-.round-pips i.now { background: var(--brass-hi); border-color: var(--brass-hi); box-shadow: 0 0 10px rgba(236, 208, 138, 0.7); transform: scale(1.25); }
-.round-banner .round-pips { margin-top: 22px; gap: 12px; }
-.round-banner .round-pips i { width: 18px; height: 18px; border-width: 3px; }
+.round-of span { color: var(--muted); font-size: 0.8em; }
 .requirement { font-family: var(--display); font-weight: 900; font-size: 74px; line-height: 1; margin: 2px 0 0; }
 
 /* Deck and discard, left rail */

@@ -17,8 +17,6 @@ export const REQUIREMENTS: readonly Requirement[] = [
 ];
 export const ROUNDS = REQUIREMENTS.length;
 /** What people at the table call each round (RULES.md "Rounds"). */
-/** Short names for tight spaces (the scoreboard's columns). */
-export const ROUND_SHORT = ["1R 1S", "2S", "2R", "2S 1R", "2R 1S", "3S", "3R"] as const;
 export const ROUND_NAMES = ["One run, one set", "Two sets", "Two runs", "Two sets, one run", "Two runs, one set", "Three sets", "Three runs"] as const;
 export const HAND_SIZE = 11;
 export const MAX_BUYS = 3;

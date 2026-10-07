@@ -208,3 +208,22 @@ describe("playOnSet", () => {
     expect(reason(playOnSet(base(), c(9)))).toMatch(/doesn't fit/);
   });
 });
+
+describe("Aces (mutation gaps)", () => {
+  it("only an Ace fills the 14 spot, and an Ace never fills a middle spot", () => {
+    expect(reason(readRun([c(11), c(12), c(13), c(2)]))).toMatch(/in order/);
+    expect(reason(readRun([c(5), c(1), c(7), c(8)]))).toMatch(/in order/);
+    const high = ok(readRun([c(10), c(11), c(12), c(13)]));
+    expect(reason(playOnRun(high, c(13), { at: "high" }))).toMatch(/doesn't fit/);
+  });
+
+  it("an Ace after jokers reads high, before jokers low", () => {
+    expect(ok(readRun([J(), J(), J(), c(1)])).low).toBe(11);
+    expect(ok(readRun([c(1), J(), J(), J()])).low).toBe(1);
+  });
+
+  it("a joker can't be replaced by another suit's card or a joker, even one that 'fits' the value", () => {
+    const run = ok(readRun([c(5), J(), c(7), c(8)]));
+    expect(reason(playOnRun(run, J(), { replace: 1, jokerTo: "low" }))).toMatch(/stands for/);
+  });
+});

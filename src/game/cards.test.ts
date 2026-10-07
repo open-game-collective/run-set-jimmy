@@ -101,3 +101,28 @@ describe("mulberry32", () => {
     }
   });
 });
+
+describe("shuffle is fair", () => {
+  it("puts every card everywhere about equally often", () => {
+    const items = ["a", "b", "c", "d"];
+    const firsts: Record<string, number> = { a: 0, b: 0, c: 0, d: 0 };
+    const lasts: Record<string, number> = { a: 0, b: 0, c: 0, d: 0 };
+    const rng = mulberry32(99);
+    for (let i = 0; i < 4000; i++) {
+      const out = shuffle(items, rng);
+      firsts[out[0] ?? ""]! += 1;
+      lasts[out[3] ?? ""]! += 1;
+    }
+    for (const k of items) {
+      expect(firsts[k]).toBeGreaterThan(850);
+      expect(firsts[k]).toBeLessThan(1150);
+      expect(lasts[k]).toBeGreaterThan(850);
+      expect(lasts[k]).toBeLessThan(1150);
+    }
+  });
+
+  it("mulberry32 is the standard generator (fixed first values)", () => {
+    const rng = mulberry32(1);
+    expect([rng(), rng(), rng()].map((x) => x.toFixed(6))).toEqual(["0.627074", "0.002736", "0.527447"]);
+  });
+});

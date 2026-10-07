@@ -5,6 +5,7 @@ import {
   answerOffer,
   closeBuyWindow,
   deal,
+  describeRequirement,
   discard,
   draw,
   goDown,
@@ -542,5 +543,69 @@ describe("goDown arranges runs", () => {
     const s1 = rig({ hands: [[...loose, ...st2, c(2, "S"), c(3, "S")], filler(11)], phase: { kind: "play" } });
     const t = ok(goDown(s1, "a", [{ kind: "run", cardIds: ids(loose), spare: "low" }, { kind: "set", cardIds: ids(st2) }]));
     expect(t.melds[0]?.meld.kind === "run" && t.melds[0].meld.low).toBe(4);
+  });
+});
+
+describe("mutation gaps", () => {
+  it("a joker kept at the cut leaves the deck: no card is in two places", () => {
+    for (let seed = 1; seed < 60; seed++) {
+      for (let at = 0; at < 162; at += 7) {
+        const s = deal({ seatIds: ["a", "b", "c", "d"], round: 1, dealer: 0, rng: mulberry32(seed), cutAt: at });
+        if (!s.cut?.kept) continue;
+        const all = [...s.seats.flatMap((x) => x.hand), ...s.deck, ...s.discard].map((x) => x.id);
+        expect(all).toHaveLength(162);
+        expect(new Set(all).size).toBe(162);
+        return;
+      }
+    }
+    throw new Error("no joker cut found");
+  });
+
+  it("starts every hand empty: nothing down, no buys, no melds", () => {
+    const s = deal({ seatIds: ["a", "b"], round: 1, dealer: 0, rng: mulberry32(2), cutAt: 3 });
+    expect(s.seats.every((x) => !x.down && x.buys === 0)).toBe(true);
+    expect(s.melds).toEqual([]);
+    expect(s.cut?.seat).toBe("b");
+  });
+
+  it("deals only real rounds", () => {
+    expect(() => deal({ seatIds: ["a", "b"], round: 8, dealer: 0, rng: mulberry32(1), cutAt: 0 })).toThrow(/No round 8/);
+    expect(() => deal({ seatIds: ["a", "b"], round: 0, dealer: 0, rng: mulberry32(1), cutAt: 0 })).toThrow(/No round 0/);
+  });
+
+  it("names every requirement", () => {
+    expect(REQUIREMENTS.map((r) => describeRequirement(r))).toEqual([
+      "1 run and 1 set",
+      "2 sets",
+      "2 runs",
+      "1 run and 2 sets",
+      "2 runs and 1 set",
+      "3 sets",
+      "3 runs",
+    ]);
+  });
+
+  it("explains a draw during an offer, and a buy from a stranger or with nothing to buy", () => {
+    const offer = rig({ hands: [filler(11), filler(11), filler(11)], phase: { kind: "offer", requests: ["c"] } });
+    expect(reason(draw(offer, "a", "deck"))).toMatch(/take it or let it go/);
+    const open = rig({ hands: [filler(11), filler(11), filler(11)], phase: { kind: "draw", window: "open", requests: [] } });
+    expect(reason(requestBuy(open, "zz"))).toMatch(/not in this game/);
+    expect(reason(requestBuy({ ...open, discard: [] }, "b"))).toMatch(/nothing to buy/);
+    expect(reason(closeBuyWindow(rig({ hands: [filler(11), filler(11)], phase: { kind: "play" } })))).toMatch(/No buy window/);
+    expect(reason(closeBuyWindow(rig({ hands: [filler(11), filler(11)] })))).toMatch(/No buy window/);
+  });
+
+  it("an empty deck and no discards to reshuffle: no card to draw", () => {
+    const s0 = rig({ hands: [filler(11), filler(11)], deck: [], discard: [c(4)] });
+    expect(reason(draw(s0, "a", "deck"))).toMatch(/no cards left/);
+  });
+
+  it("a buy reshuffles too when the deck is empty, and the buyer still gets two cards", () => {
+    const pile = [c(2), c(3), c(4), c(5), c(6)];
+    const s0 = rig({ hands: [filler(11), filler(11), filler(11)], deck: [], discard: pile, phase: { kind: "offer", requests: ["b"] } });
+    const s = ok(answerOffer(s0, "a", "let-go"));
+    expect(seat(s, "b").hand).toHaveLength(13);
+    expect(seat(s, "b").hand.at(-2)?.id).toBe(pile[4]?.id);
+    expect(seat(s, "a").hand).toHaveLength(12);
   });
 });

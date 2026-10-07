@@ -35,3 +35,17 @@ describe("score sheet", () => {
     expect(winners(sheet)).toEqual(["a", "b"]);
   });
 });
+
+describe("standings order", () => {
+  it("sorts lowest first whatever the seat order", () => {
+    let sheet = newScoreSheet(["a", "b", "c"]);
+    sheet = addRound(sheet, { a: 50, b: 5, c: 20 });
+    expect(standings(sheet).map((s) => s.id)).toEqual(["b", "c", "a"]);
+    sheet = addRound(sheet, { a: 0, b: 60, c: 0 });
+    expect(standings(sheet)).toEqual([
+      { id: "c", total: 20 },
+      { id: "a", total: 50 },
+      { id: "b", total: 65 },
+    ]);
+  });
+});

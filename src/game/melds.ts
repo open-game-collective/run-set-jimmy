@@ -26,22 +26,34 @@ const fills = (card: Natural, value: number) => card.rank === value || (card.ran
 
 export const runHigh = (run: RunMeld): number => run.low + run.cards.length - 1;
 
-/** Read cards, in the order the player laid them out, as a run. */
-export function readRun(cards: readonly Card[]): MeldResult<RunMeld> {
+/** The run's suit-setting first real card, or why these cards can't be a run in any order. */
+function runAnchor(cards: readonly Card[]): { ok: true; first: Natural } | { ok: false; reason: string } {
   if (cards.length < MIN_RUN) return fail("A run needs at least 4 cards");
   const real = naturals(cards);
   const first = real[0];
   if (!first) return fail("A run needs at least one real card");
   if (real.some((c) => c.suit !== first.suit)) return fail("A run's cards must all be the same suit");
+  return { ok: true, first };
+}
 
+/** Do the cards, laid out from value `low` upwards, stay within Ace–Ace and match their spots? */
+function runFitsFrom(cards: readonly Card[], low: number): boolean {
+  return low >= LOWEST && low + cards.length - 1 <= HIGHEST && cards.every((c, i) => c.kind === "joker" || fills(c, low + i));
+}
+
+/** The value of the run's first spot, trying an Ace low then high; undefined when no order works. */
+function runLowFor(cards: readonly Card[], first: Natural): number | undefined {
   const at = cards.indexOf(first);
   const lows = first.rank === 1 ? [1 - at, HIGHEST - at] : [first.rank - at];
-  const low = lows.find(
-    (l) =>
-      l >= LOWEST &&
-      l + cards.length - 1 <= HIGHEST &&
-      cards.every((c, i) => c.kind === "joker" || fills(c, l + i)),
-  );
+  return lows.find((l) => runFitsFrom(cards, l));
+}
+
+/** Read cards, in the order the player laid them out, as a run. */
+export function readRun(cards: readonly Card[]): MeldResult<RunMeld> {
+  const anchor = runAnchor(cards);
+  if (!anchor.ok) return anchor;
+  const { first } = anchor;
+  const low = runLowFor(cards, first);
   if (low === undefined) return fail("A run's cards must be in order, with no gaps and no wrapping past the Ace");
   return { ok: true, meld: { kind: "run", suit: first.suit, low, cards: [...cards] } };
 }
@@ -58,31 +70,40 @@ export function readSet(cards: readonly Card[]): MeldResult<SetMeld> {
 
 const endOpen = (run: RunMeld, end: "low" | "high") => (end === "low" ? run.low > LOWEST : runHigh(run) < HIGHEST);
 
-/** Play one card onto a run: extend an open end, or replace a joker (which then slides to an end). */
-export function playOnRun(run: RunMeld, card: Card, placement: RunPlacement): MeldResult<RunMeld> {
-  if ("at" in placement) {
-    const end = placement.at;
-    if (!endOpen(run, end)) return fail("That end is closed");
-    const value = end === "low" ? run.low - 1 : runHigh(run) + 1;
-    if (card.kind === "card" && (card.suit !== run.suit || !fills(card, value))) {
-      return fail("That card doesn't fit this run");
-    }
-    return end === "low"
-      ? { ok: true, meld: { ...run, low: run.low - 1, cards: [card, ...run.cards] } }
-      : { ok: true, meld: { ...run, cards: [...run.cards, card] } };
-  }
+/** The value a card would take just past this end of the run. */
+const valueBeyond = (run: RunMeld, end: "low" | "high") => (end === "low" ? run.low - 1 : runHigh(run) + 1);
 
-  const { replace, jokerTo } = placement;
+/** A joker fits any spot; a real card must be the run's suit and the spot's rank. */
+const fitsSpot = (run: RunMeld, card: Card, value: number) =>
+  card.kind === "joker" || (card.suit === run.suit && fills(card, value));
+
+/** The run with one more card on this end. */
+const addAtEnd = (run: RunMeld, card: Card, end: "low" | "high"): RunMeld =>
+  end === "low" ? { ...run, low: run.low - 1, cards: [card, ...run.cards] } : { ...run, cards: [...run.cards, card] };
+
+function extendRun(run: RunMeld, card: Card, end: "low" | "high"): MeldResult<RunMeld> {
+  if (!endOpen(run, end)) return fail("That end is closed");
+  if (!fitsSpot(run, card, valueBeyond(run, end))) return fail("That card doesn't fit this run");
+  return { ok: true, meld: addAtEnd(run, card, end) };
+}
+
+/** Only the natural card a joker stands for can take its spot. */
+const standsFor = (run: RunMeld, card: Card, spot: number) =>
+  card.kind === "card" && card.suit === run.suit && fills(card, run.low + spot);
+
+const swapAt = (cards: readonly Card[], spot: number, card: Card): Card[] => cards.map((c, i) => (i === spot ? card : c));
+
+function replaceJoker(run: RunMeld, card: Card, { replace, jokerTo }: { replace: number; jokerTo: "low" | "high" }): MeldResult<RunMeld> {
   const joker = run.cards[replace];
   if (joker?.kind !== "joker") return fail("That spot is not a joker");
-  if (card.kind !== "card" || card.suit !== run.suit || !fills(card, run.low + replace)) {
-    return fail("Only the card the joker stands for can replace it");
-  }
+  if (!standsFor(run, card, replace)) return fail("Only the card the joker stands for can replace it");
   if (!endOpen(run, jokerTo)) return fail("That end is closed, so the joker can't slide there");
-  const cards = run.cards.map((c, i) => (i === replace ? card : c));
-  return jokerTo === "low"
-    ? { ok: true, meld: { ...run, low: run.low - 1, cards: [joker, ...cards] } }
-    : { ok: true, meld: { ...run, cards: [...cards, joker] } };
+  return { ok: true, meld: addAtEnd({ ...run, cards: swapAt(run.cards, replace, card) }, joker, jokerTo) };
+}
+
+/** Play one card onto a run: extend an open end, or replace a joker (which then slides to an end). */
+export function playOnRun(run: RunMeld, card: Card, placement: RunPlacement): MeldResult<RunMeld> {
+  return "at" in placement ? extendRun(run, card, placement.at) : replaceJoker(run, card, placement);
 }
 
 /** Play one card onto a set: one more of its rank, or a joker. */

@@ -18,10 +18,10 @@ import { getDeviceType } from "~/utils/deviceType";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "Trivia Jam" },
+    { title: "Open Game Collective" },
     {
       name: "description",
-      content: "Trivia Jam is a trivia game for parties.",
+      content: "A community-driven platform where players shape, fund, and enjoy evolving mini-games. Join us and help guide the future of play.",
     },
   ];
 };

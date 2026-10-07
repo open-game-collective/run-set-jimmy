@@ -4,30 +4,56 @@ import { CallerSnapshotFrom } from "actor-kit";
 import React from "react";
 import type { GameMachine } from "../app/game.machine";
 import { SessionMachine } from "../app/session.machine";
+import type { GamePrivateContext } from "../app/game.types";
 
-export const defaultGameSnapshot = {
+export const defaultGameSnapshot: CallerSnapshotFrom<GameMachine> = {
   public: {
     id: "test-game-id",
-    gameCode: "TEST123",
     hostId: "host-123",
     hostName: "Test Host",
+    gameCode: "TEST123",
     players: [
-      { id: "host-123", name: "Test Host", score: 0 },
-      { id: "player-456", name: "Test Player", score: 0 },
+      { 
+        id: "host-123", 
+        name: "Test Host", 
+        score: 0,
+        hand: [],
+        isDown: false,
+        buyCount: 0,
+        runs: [],
+        sets: [],
+      },
+      { 
+        id: "player-456", 
+        name: "Test Player", 
+        score: 0,
+        hand: [],
+        isDown: false,
+        buyCount: 0,
+        runs: [],
+        sets: [],
+      },
     ],
-    currentQuestion: null,
-    buzzerQueue: [],
-    gameStatus: "lobby" as const,
+    gamePhase: "lobby",
+    currentRound: 0,
+    roundRequirements: { runs: 1, sets: 1 },
+    currentTurn: null,
+    turnPhase: null,
+    discardPile: [],
+    visiblePlays: [],
     winner: null,
     settings: {
-      maxPlayers: 10,
-      questionCount: 10,
+      maxPlayers: 7,
     },
-    questionNumber: 0,
+    actionHistory: [],
+    scores: {},
   },
-  private: {},
-  value: { lobby: "ready" },
-} satisfies CallerSnapshotFrom<GameMachine>;
+  private: {
+    drawPile: [],
+    privateActions: [],
+  } as GamePrivateContext,
+  value: { lobby: "ready" }
+};
 
 export const defaultSessionSnapshot = {
   public: {

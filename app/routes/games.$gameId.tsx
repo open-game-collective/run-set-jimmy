@@ -1,7 +1,6 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/cloudflare";
 import { useLoaderData, useParams } from "@remix-run/react";
 import { createAccessToken, createActorFetch } from "actor-kit/server";
-import { HostView } from "~/components/host-view";
 import { PlayerView } from "~/components/player-view";
 import { SpectatorView } from "~/components/spectator-view";
 import type { gameMachine } from "~/game.machine";
@@ -54,9 +53,7 @@ export default function GameRoute() {
       initialSnapshot={payload.snapshot}
     >
       {deviceType !== "mobile" ? (
-        <SpectatorView host={host} />
-      ) : hostId === userId ? (
-        <HostView host={host} />
+        <SpectatorView />
       ) : (
         <PlayerView />
       )}

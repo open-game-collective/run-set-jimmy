@@ -12,3 +12,4 @@ npm-debug.log*
 .wrangler/
 *storybook.log
 storybook-static/
+.DS_Store

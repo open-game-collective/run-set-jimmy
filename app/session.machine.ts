@@ -1,16 +1,12 @@
-import type { ActorKitStateMachine } from "actor-kit";
+import { ActorKitStateMachine } from "actor-kit";
 import { setup } from "xstate";
-import type {
-  SessionEvent,
-  SessionInput,
-  SessionServerContext,
-} from "./session.types";
+import type { SessionEvent, SessionInput, SessionServerContext } from "./session.types";
 
 export const sessionMachine = setup({
-  types: {
-    context: {} as SessionServerContext,
-    events: {} as SessionEvent,
-    input: {} as SessionInput,
+  types: {} as {
+    context: SessionServerContext;
+    events: SessionEvent;
+    input: SessionInput;
   },
   actions: {},
   guards: {},
@@ -36,10 +32,6 @@ export const sessionMachine = setup({
       },
     },
   },
-}) satisfies ActorKitStateMachine<
-  SessionEvent,
-  SessionInput,
-  SessionServerContext
->;
+}) satisfies ActorKitStateMachine<SessionEvent, SessionInput, SessionServerContext>;
 
 export type SessionMachine = typeof sessionMachine;

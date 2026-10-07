@@ -1,9 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { expect } from "@storybook/test";
-import { userEvent } from "@storybook/testing-library";
 import { withActorKit } from "actor-kit/storybook";
-import { createActorKitMockClient } from "actor-kit/test";
-import React from "react";
 import { PlayerView } from "../app/components/player-view";
 import { GameContext } from "../app/game.context";
 import type { GameMachine } from "../app/game.machine";
@@ -16,15 +12,16 @@ const meta = {
   component: PlayerView,
   parameters: {
     layout: "fullscreen",
+    viewport: { defaultViewport: "mobile1" },
   },
   decorators: [
-    withActorKit<SessionMachine>({
-      actorType: "session",
-      context: SessionContext,
-    }),
     withActorKit<GameMachine>({
       actorType: "game",
       context: GameContext,
+    }),
+    withActorKit<SessionMachine>({
+      actorType: "session",
+      context: SessionContext,
     }),
   ],
 } satisfies Meta<typeof PlayerView>;
@@ -32,218 +29,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const InLobby: Story = {
-  parameters: {
-    actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "player-456",
-          },
-        },
-      },
-      game: {
-        "game-123": {
-          ...defaultGameSnapshot,
-          public: {
-            ...defaultGameSnapshot.public,
-            players: [{ id: "player-456", name: "Test Player", score: 0 }],
-          },
-        },
-      },
-    },
-  },
-};
-
-export const WaitingForQuestion: Story = {
-  parameters: {
-    actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "player-456",
-          },
-        },
-      },
-      game: {
-        "game-123": {
-          ...defaultGameSnapshot,
-          public: {
-            ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            players: [{ id: "player-456", name: "Test Player", score: 0 }],
-          },
-          value: { active: "questionPrep" },
-        },
-      },
-    },
-  },
-};
-
-export const QuestionVisible: Story = {
-  parameters: {
-    actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "player-456",
-          },
-        },
-      },
-      game: {
-        "game-123": {
-          ...defaultGameSnapshot,
-          public: {
-            ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: {
-              text: "What is the capital of France?",
-            },
-            players: [{ id: "player-456", name: "Test Player", score: 0 }],
-          },
-          value: { active: "questionActive" },
-        },
-      },
-    },
-  },
-  play: async ({ mount, step, canvas }) => {
-    const gameClient = createActorKitMockClient<GameMachine>({
-      initialSnapshot: {
-        ...defaultGameSnapshot,
-        public: {
-          ...defaultGameSnapshot.public,
-          gameStatus: "active",
-          currentQuestion: {
-            text: "What is the capital of France?",
-          },
-          players: [{ id: "player-456", name: "Test Player", score: 0 }],
-        },
-        value: { active: "questionActive" },
-      },
-    });
-
-    await step("Mount component with initial state", async () => {
-      await mount(
-        <GameContext.ProviderFromClient client={gameClient}>
-          <PlayerView />
-        </GameContext.ProviderFromClient>
-      );
-    });
-
-    await step("Click buzz in button", async () => {
-      const buzzButton = await canvas.findByTestId("buzz-button");
-      await userEvent.click(buzzButton);
-
-      // Simulate backend adding player to buzzer queue
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = ["player-456"];
-        draft.value = { active: "answerValidation" };
-      });
-    });
-
-    await step("Verify player is in buzzer queue", async () => {
-      const answeringStatus = await canvas.findByTestId("answering-status");
-      expect(answeringStatus).toHaveTextContent(/your turn to answer/i);
-    });
-
-    await step("Simulate correct answer", async () => {
-      // Simulate host validating answer as correct
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = [];
-        draft.public.players[0].score = 1;
-        draft.public.lastAnswerResult = {
-          playerId: "player-456",
-          playerName: "Test Player",
-          correct: true,
-        };
-        draft.public.currentQuestion = null;
-        draft.value = { active: "questionPrep" };
-      });
-
-      // Verify correct answer feedback
-      const answerFeedback = await canvas.findByTestId("answer-feedback");
-      expect(answerFeedback).toBeInTheDocument();
-
-      const playerFeedback = await canvas.findByTestId("player-feedback");
-      expect(playerFeedback).toHaveTextContent(/correct/i);
-
-      // Verify score update
-      const scoreDisplay = await canvas.findByTestId("score-display");
-      expect(scoreDisplay).toHaveTextContent("1");
-    });
-  },
-};
-
-export const PlayerAnsweredIncorrectly: Story = {
-  parameters: {
-    actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "player-456",
-          },
-        },
-      },
-      game: {
-        "game-123": {
-          ...defaultGameSnapshot,
-          public: {
-            ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: {
-              text: "What is the capital of France?",
-              isVisible: true,
-            },
-            buzzerQueue: ["player-456"],
-            lastAnswerResult: {
-              playerId: "player-456",
-              playerName: "Test Player",
-              correct: false,
-            },
-            players: [{ id: "player-456", name: "Test Player", score: 0 }],
-          },
-          value: { active: "answerValidation" },
-        },
-      },
-    },
-  },
-  play: async ({ canvas, mount, step }) => {
-    await step("Mount component with initial state", async () => {
-      await mount(<PlayerView />);
-    });
-
-    await step("Verify incorrect answer feedback", async () => {
-      // Use test IDs to find elements
-      const answerFeedback = await canvas.findByTestId("answer-feedback");
-      expect(answerFeedback).toBeInTheDocument();
-
-      const playerFeedback = await canvas.findByTestId("player-feedback");
-      expect(playerFeedback).toHaveTextContent(/incorrect/i);
-
-      // Verify score remains at 0
-      const scoreDisplay = await canvas.findByTestId("score-display");
-      expect(scoreDisplay).toHaveTextContent("0");
-
-      // Verify current question is still visible
-      const questionArea = await canvas.findByTestId("question-area");
-      expect(questionArea).toHaveTextContent("What is the capital of France?");
-
-      // Verify buzz button is not present after incorrect answer
-      const buzzButton = canvas.queryByTestId("buzz-button");
-      expect(buzzButton).not.toBeInTheDocument();
-    });
-  },
-};
-
-export const NameEntry: Story = {
+export const NewPlayer: Story = {
   parameters: {
     actorKit: {
       session: {
@@ -260,18 +46,16 @@ export const NameEntry: Story = {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "lobby",
+            hostId: "host-123",
             players: [],
-            questionNumber: 0,
           },
-          value: { lobby: "ready" },
         },
       },
     },
   },
 };
 
-export const NameEntryInteraction: Story = {
+export const InGame: Story = {
   parameters: {
     actorKit: {
       session: {
@@ -279,7 +63,7 @@ export const NameEntryInteraction: Story = {
           ...defaultSessionSnapshot,
           public: {
             ...defaultSessionSnapshot.public,
-            userId: "new-player",
+            userId: "player-1",
           },
         },
       },
@@ -288,187 +72,38 @@ export const NameEntryInteraction: Story = {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "lobby",
-            players: [],
-            questionNumber: 0,
-          },
-          value: { lobby: "ready" },
-        },
-      },
-    },
-  },
-  play: async ({ canvas, mount, step }) => {
-    const gameClient = createActorKitMockClient<GameMachine>({
-      initialSnapshot: {
-        ...defaultGameSnapshot,
-        public: {
-          ...defaultGameSnapshot.public,
-          gameStatus: "lobby",
-          players: [],
-          questionNumber: 0,
-        },
-      },
-    });
-
-    await step("Mount component with initial state", async () => {
-      await mount(
-        <GameContext.ProviderFromClient client={gameClient}>
-          <PlayerView />
-        </GameContext.ProviderFromClient>
-      );
-    });
-
-    await step("Enter player name", async () => {
-      const nameInput = canvas.getByLabelText(/your name/i);
-      await userEvent.type(nameInput, "New Player");
-    });
-
-    await step("Submit name", async () => {
-      const joinButton = canvas.getByRole("button", { name: /^join game$/i });
-      await userEvent.click(joinButton);
-
-      // Verify loading state
-      const loadingButton = await canvas.findByRole("button", {
-        name: /joining/i,
-      });
-      expect(loadingButton).toBeDisabled();
-
-      // Simulate backend adding player
-      gameClient.produce((draft) => {
-        draft.public.players.push({
-          id: "new-player",
-          name: "New Player",
-          score: 0,
-        });
-      });
-    });
-
-    await step("Verify joined successfully", async () => {
-      const welcomeMessage = await canvas.findByText(/welcome, new player!/i);
-      expect(welcomeMessage).toBeInTheDocument();
-    });
-  },
-};
-
-export const PlayerAnsweredCorrectly: Story = {
-  parameters: {
-    actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "player-456",
-          },
-        },
-      },
-      game: {
-        "game-123": {
-          ...defaultGameSnapshot,
-          public: {
-            ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: null,
-            buzzerQueue: [],
-            lastAnswerResult: {
-              playerId: "player-456",
-              playerName: "Test Player",
-              correct: true,
-            },
-            players: [{ id: "player-456", name: "Test Player", score: 1 }],
-          },
-          value: { active: "questionPrep" },
-        },
-      },
-    },
-  },
-};
-
-export const AlreadyBuzzedIn: Story = {
-  parameters: {
-    actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "player-456",
-          },
-        },
-      },
-      game: {
-        "game-123": {
-          ...defaultGameSnapshot,
-          public: {
-            ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: {
-              text: "What is the capital of France?",
-            },
-            buzzerQueue: [], // Empty queue after being removed
-            previousAnswers: [
+            currentTurn: "player-1",
+            players: [
               {
-                playerId: "player-456",
-                playerName: "Test Player",
-                correct: false,
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [
+                  { id: "1", suit: "hearts", rank: "A" },
+                  { id: "2", suit: "diamonds", rank: "2" },
+                  { id: "3", suit: "clubs", rank: "3" },
+                  { id: "4", suit: "spades", rank: "K" },
+                ],
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
               },
             ],
-            lastAnswerResult: {
-              playerId: "player-456",
-              playerName: "Test Player",
-              correct: false,
-            },
-            players: [
-              { id: "player-456", name: "Test Player", score: 0 },
-              { id: "player-789", name: "Other Player", score: 0 },
-            ],
           },
-          value: { active: "questionActive" },
         },
       },
     },
   },
-  play: async ({ canvas, mount, step }) => {
-    await step("Mount component with initial state", async () => {
-      await mount(<PlayerView />);
-    });
-
-    await step("Verify question is visible", async () => {
-      // The question should still be visible
-      const question = await canvas.findByText(
-        "What is the capital of France?"
-      );
-      expect(question).toBeInTheDocument();
-    });
-
-    await step(
-      "Verify buzz button is not present after incorrect answer",
-      async () => {
-        // The buzz button should not be present since player already answered incorrectly
-        const buzzButton = canvas.queryByRole("button", { name: /buzz/i });
-        expect(buzzButton).not.toBeInTheDocument();
-      }
-    );
-
-    await step("Verify incorrect answer feedback", async () => {
-      // Should show the incorrect answer feedback
-      const feedbackMessage = await canvas.findByText(
-        /sorry, that's incorrect/i
-      );
-      expect(feedbackMessage).toBeInTheDocument();
-    });
-  },
 };
 
-export const QuestionWithBuzzer: Story = {
+export const PlayerDown: Story = {
   parameters: {
     actorKit: {
       session: {
         "session-123": {
-          ...defaultSessionSnapshot,
           public: {
-            ...defaultSessionSnapshot.public,
-            userId: "player-456",
+            userId: "player-1",
           },
         },
       },
@@ -477,79 +112,40 @@ export const QuestionWithBuzzer: Story = {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: {
-              text: "What is the capital of France?",
-            },
-            buzzerQueue: [], // Empty queue, player hasn't buzzed yet
+            currentTurn: "player-1",
             players: [
-              { id: "player-456", name: "Test Player", score: 0 },
-              { id: "player-789", name: "Other Player", score: 0 },
+              {
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [{ id: "1", suit: "hearts", rank: "A" }],
+                isDown: true,
+                buyCount: 2,
+                runs: [
+                  [
+                    { id: "2", suit: "diamonds", rank: "7" },
+                    { id: "3", suit: "diamonds", rank: "8" },
+                    { id: "4", suit: "diamonds", rank: "9" },
+                    { id: "5", suit: "diamonds", rank: "10" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { id: "6", suit: "hearts", rank: "K" },
+                    { id: "7", suit: "diamonds", rank: "K" },
+                    { id: "8", suit: "spades", rank: "K" },
+                  ],
+                ],
+              },
             ],
           },
-          value: { active: "questionActive" },
         },
       },
     },
   },
-  play: async ({ mount, step, canvas }) => {
-    const gameClient = createActorKitMockClient<GameMachine>({
-      initialSnapshot: {
-        ...defaultGameSnapshot,
-        public: {
-          ...defaultGameSnapshot.public,
-          gameStatus: "active",
-          currentQuestion: {
-            text: "What is the capital of France?",
-          },
-          buzzerQueue: [],
-          players: [
-            { id: "player-456", name: "Test Player", score: 0 },
-            { id: "player-789", name: "Other Player", score: 0 },
-          ],
-        },
-        value: { active: "questionActive" },
-      },
-    });
-
-    await step("Mount component with initial state", async () => {
-      const view = await mount(
-        <GameContext.ProviderFromClient client={gameClient}>
-          <PlayerView />
-        </GameContext.ProviderFromClient>
-      );
-    });
-
-    await step("Verify question is visible", async () => {
-      const question = await canvas.findByText(
-        "What is the capital of France?"
-      );
-      expect(question).toBeInTheDocument();
-    });
-
-    await step("Verify buzz button is present", async () => {
-      const buzzButton = await canvas.findByTestId("buzz-button");
-      expect(buzzButton).toBeInTheDocument();
-    });
-
-    await step("Click buzz button", async () => {
-      const buzzButton = await canvas.findByTestId("buzz-button");
-      await userEvent.click(buzzButton);
-
-      // Simulate backend adding player to buzzer queue
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = ["player-456"];
-      });
-    });
-
-    await step("Verify player is first in queue", async () => {
-      const turnMessage = await canvas.findByText(/your turn to answer/i);
-      expect(turnMessage).toBeInTheDocument();
-    });
-  },
 };
 
-export const MultiplePlayersAnswering: Story = {
+export const MidGame: Story = {
   parameters: {
     actorKit: {
       session: {
@@ -557,7 +153,7 @@ export const MultiplePlayersAnswering: Story = {
           ...defaultSessionSnapshot,
           public: {
             ...defaultSessionSnapshot.public,
-            userId: "player-1", // First player
+            userId: "player-1",
           },
         },
       },
@@ -566,181 +162,442 @@ export const MultiplePlayersAnswering: Story = {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: {
-              text: "What is the capital of France?",
-            },
+            currentTurn: "player-1",
             players: [
-              { id: "player-1", name: "Player 1", score: 0 },
-              { id: "player-2", name: "Player 2", score: 0 },
+              {
+                // Current player
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [
+                  { id: "1", suit: "hearts", rank: "A" },
+                  { id: "2", suit: "diamonds", rank: "2" },
+                  { id: "3", suit: "clubs", rank: "3" },
+                ],
+                isDown: false,
+                buyCount: 2,
+                runs: [],
+                sets: [],
+              },
+              {
+                // Player who is down
+                id: "player-2",
+                name: "Alice",
+                score: 0,
+                hand: [{ id: "4", suit: "spades", rank: "K" }],
+                isDown: true,
+                buyCount: 1,
+                runs: [
+                  [
+                    { id: "5", suit: "hearts", rank: "4" },
+                    { id: "6", suit: "hearts", rank: "5" },
+                    { id: "7", suit: "hearts", rank: "6" },
+                    { id: "8", suit: "hearts", rank: "7" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { id: "9", suit: "diamonds", rank: "Q" },
+                    { id: "10", suit: "clubs", rank: "Q" },
+                    { id: "11", suit: "spades", rank: "Q" },
+                  ],
+                ],
+              },
+              {
+                // Player with lots of cards
+                id: "player-3",
+                name: "Bob",
+                score: 0,
+                hand: Array(15)
+                  .fill(null)
+                  .map((_, i) => ({
+                    id: `bob-${i}`,
+                    suit: ["hearts", "diamonds", "clubs", "spades"][i % 4],
+                    rank: [
+                      "A",
+                      "2",
+                      "3",
+                      "4",
+                      "5",
+                      "6",
+                      "7",
+                      "8",
+                      "9",
+                      "10",
+                      "J",
+                      "Q",
+                      "K",
+                    ][i % 13],
+                  })),
+                isDown: false,
+                buyCount: 3,
+                runs: [],
+                sets: [],
+              },
             ],
           },
-          value: { active: "questionActive" },
         },
       },
     },
   },
-  play: async ({ canvas, mount, step }) => {
-    const gameClient = createActorKitMockClient<GameMachine>({
-      initialSnapshot: {
-        ...defaultGameSnapshot,
-        public: {
-          ...defaultGameSnapshot.public,
-          gameStatus: "active",
-          currentQuestion: {
-            text: "What is the capital of France?",
+};
+
+export const EndGame: Story = {
+  parameters: {
+    actorKit: {
+      session: {
+        "session-123": {
+          ...defaultSessionSnapshot,
+          public: {
+            ...defaultSessionSnapshot.public,
+            userId: "player-1",
           },
-          players: [
-            { id: "player-1", name: "Player 1", score: 0 },
-            { id: "player-2", name: "Player 2", score: 0 },
-          ],
         },
-        value: { active: "questionActive" },
       },
-    });
-
-    const sessionClient1 = createActorKitMockClient<SessionMachine>({
-      initialSnapshot: {
-        ...defaultSessionSnapshot,
-        public: {
-          ...defaultSessionSnapshot.public,
-          userId: "player-1",
-        },
-        value: { Initialization: "Ready" as const },
-      },
-    });
-
-    const sessionClient2 = createActorKitMockClient<SessionMachine>({
-      initialSnapshot: {
-        ...defaultSessionSnapshot,
-        public: {
-          ...defaultSessionSnapshot.public,
-          userId: "player-2",
-        },
-        value: { Initialization: "Ready" as const },
-      },
-    });
-
-    await step("Mount component and first player buzzes in", async () => {
-      await mount(
-        <SessionContext.ProviderFromClient client={sessionClient1}>
-          <GameContext.ProviderFromClient client={gameClient}>
-            <PlayerView />
-          </GameContext.ProviderFromClient>
-        </SessionContext.ProviderFromClient>
-      );
-
-      const buzzButton = canvas.getByRole("button", { name: /buzz/i });
-      await userEvent.click(buzzButton);
-
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = ["player-1"];
-        draft.value = { active: "answerValidation" };
-      });
-    });
-
-    await step("Verify first player is answering", async () => {
-      const yourTurnText = await canvas.findByText(/your turn to answer/i);
-      expect(yourTurnText).toBeInTheDocument();
-    });
-
-    await step("Simulate incorrect answer from first player", async () => {
-      // Simulate host marking answer as incorrect
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = [];
-        draft.public.lastAnswerResult = {
-          playerId: "player-1",
-          playerName: "Player 1",
-          correct: false,
-        };
-        draft.public.previousAnswers = [
-          {
-            playerId: "player-1",
-            playerName: "Player 1",
-            correct: false,
+      game: {
+        "game-123": {
+          ...defaultGameSnapshot,
+          public: {
+            ...defaultGameSnapshot.public,
+            currentTurn: "player-1",
+            players: [
+              {
+                // Winner
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [],
+                isDown: true,
+                buyCount: 0,
+                runs: [
+                  [
+                    { id: "1", suit: "hearts", rank: "4" },
+                    { id: "2", suit: "hearts", rank: "5" },
+                    { id: "3", suit: "hearts", rank: "6" },
+                    { id: "4", suit: "hearts", rank: "7" },
+                  ],
+                  [
+                    { id: "5", suit: "diamonds", rank: "8" },
+                    { id: "6", suit: "diamonds", rank: "9" },
+                    { id: "7", suit: "diamonds", rank: "10" },
+                    { id: "8", suit: "diamonds", rank: "J" },
+                  ],
+                  [
+                    { id: "9", suit: "clubs", rank: "2" },
+                    { id: "10", suit: "clubs", rank: "3" },
+                    { id: "11", suit: "clubs", rank: "4" },
+                    { id: "12", suit: "clubs", rank: "5" },
+                  ],
+                ],
+                sets: [],
+              },
+              // ... add other players with remaining cards ...
+            ],
           },
-        ];
-        draft.value = { active: "questionActive" };
-      });
-    });
-
-    await step("Verify incorrect answer feedback", async () => {
-      // Use test IDs instead of text content
-      const answerFeedback = await canvas.findByTestId("answer-feedback");
-      expect(answerFeedback).toBeInTheDocument();
-
-      const playerFeedback = await canvas.findByTestId("player-feedback");
-      expect(playerFeedback).toHaveTextContent(/incorrect/i);
-
-      // Verify score remains at 0
-      const scoreDisplay = await canvas.findByTestId("score-display");
-      expect(scoreDisplay).toHaveTextContent("0");
-
-      // Verify buzz button is not present for player who answered incorrectly
-      const buzzButton = canvas.queryByTestId("buzz-button");
-      expect(buzzButton).not.toBeInTheDocument();
-    });
-
-    // Switch to second player's view
-    await step("Switch to second player view", async () => {
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = [];
-      });
-
-      // Remount with second player's session
-      await mount(
-        <SessionContext.ProviderFromClient client={sessionClient2}>
-          <GameContext.ProviderFromClient client={gameClient}>
-            <PlayerView />
-          </GameContext.ProviderFromClient>
-        </SessionContext.ProviderFromClient>
-      );
-    });
-
-    await step("Verify second player can buzz in", async () => {
-      // Second player should see the buzz button
-      const buzzButton = canvas.getByRole("button", { name: /buzz/i });
-      expect(buzzButton).toBeInTheDocument();
-
-      await userEvent.click(buzzButton);
-
-      // Simulate backend adding second player to buzzer queue
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = ["player-2"];
-        draft.value = { active: "answerValidation" };
-      });
-
-      // Verify second player is now answering
-      const yourTurnText = await canvas.findByText(/your turn to answer/i);
-      expect(yourTurnText).toBeInTheDocument();
-    });
-
-    await step("Simulate correct answer from second player", async () => {
-      // Simulate host marking answer as correct
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = [];
-        draft.public.players[1].score = 1; // Increment player 2's score
-        draft.public.lastAnswerResult = {
-          playerId: "player-2",
-          playerName: "Player 2",
-          correct: true,
-        };
-        draft.public.currentQuestion = null;
-        draft.value = { active: "questionPrep" };
-      });
-
-      // Verify correct answer feedback using test IDs
-      const answerFeedback = await canvas.findByTestId("answer-feedback");
-      expect(answerFeedback).toBeInTheDocument();
-
-      const playerFeedback = await canvas.findByTestId("player-feedback");
-      expect(playerFeedback).toHaveTextContent(/correct/i);
-
-      // Verify score update
-      const scoreDisplay = await canvas.findByTestId("score-display");
-      expect(scoreDisplay).toHaveTextContent("1");
-    });
+        },
+      },
+    },
   },
 };
 
-// Add more stories following the same pattern...
+export const StartOfRound: Story = {
+  parameters: {
+    actorKit: {
+      session: {
+        "session-123": {
+          ...defaultSessionSnapshot,
+          public: {
+            ...defaultSessionSnapshot.public,
+            userId: "player-1",
+          },
+        },
+      },
+      game: {
+        "game-123": {
+          ...defaultGameSnapshot,
+          public: {
+            ...defaultGameSnapshot.public,
+            currentTurn: "player-1",
+            round: "1R1S", // First round - need 1 run and 1 set
+            players: [
+              {
+                // Current player with starting hand
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [
+                  { id: "1", suit: "hearts", rank: "4" },
+                  { id: "2", suit: "hearts", rank: "5" },
+                  { id: "3", suit: "hearts", rank: "6" },
+                  { id: "4", suit: "diamonds", rank: "Q" },
+                  { id: "5", suit: "clubs", rank: "Q" },
+                  { id: "6", suit: "spades", rank: "Q" },
+                  { id: "7", suit: "diamonds", rank: "2" },
+                  { id: "8", suit: "clubs", rank: "7" },
+                  { id: "9", suit: "spades", rank: "A" },
+                  { id: "10", suit: "hearts", rank: "K" },
+                  { id: "11", suit: "diamonds", rank: "3" },
+                ],
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              // Add other players with 11 cards each
+            ],
+          },
+        },
+      },
+    },
+  },
+};
+
+export const AboutToGoDown: Story = {
+  parameters: {
+    actorKit: {
+      session: {
+        "session-123": {
+          ...defaultSessionSnapshot,
+          public: {
+            ...defaultSessionSnapshot.public,
+            userId: "player-1",
+          },
+        },
+      },
+      game: {
+        "game-123": {
+          ...defaultGameSnapshot,
+          public: {
+            ...defaultGameSnapshot.public,
+            currentTurn: "player-1",
+            round: "2R", // Need two runs
+            players: [
+              {
+                // Current player ready to go down
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [
+                  // First run
+                  { id: "1", suit: "hearts", rank: "4" },
+                  { id: "2", suit: "hearts", rank: "5" },
+                  { id: "3", suit: "hearts", rank: "6" },
+                  { id: "4", suit: "hearts", rank: "7" },
+                  // Second run
+                  { id: "5", suit: "diamonds", rank: "8" },
+                  { id: "6", suit: "diamonds", rank: "9" },
+                  { id: "7", suit: "diamonds", rank: "10" },
+                  { id: "8", suit: "diamonds", rank: "J" },
+                  // Extra cards
+                  { id: "9", suit: "clubs", rank: "2" },
+                  { id: "10", suit: "spades", rank: "K" },
+                  { id: "11", suit: "hearts", rank: "A" },
+                ],
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
+              },
+              {
+                // Another player who is down
+                id: "player-2",
+                name: "Alice",
+                score: 0,
+                hand: [{ id: "12", suit: "spades", rank: "3" }],
+                isDown: true,
+                buyCount: 2,
+                runs: [
+                  [
+                    { id: "13", suit: "clubs", rank: "5" },
+                    { id: "14", suit: "clubs", rank: "6" },
+                    { id: "15", suit: "clubs", rank: "7" },
+                    { id: "16", suit: "clubs", rank: "8" },
+                  ],
+                  [
+                    { id: "17", suit: "spades", rank: "9" },
+                    { id: "18", suit: "spades", rank: "10" },
+                    { id: "19", suit: "spades", rank: "J" },
+                    { id: "20", suit: "spades", rank: "Q" },
+                  ],
+                ],
+                sets: [],
+              },
+            ],
+          },
+        },
+      },
+    },
+  },
+};
+
+export const MaximumHand: Story = {
+  parameters: {
+    actorKit: {
+      session: {
+        "session-123": {
+          ...defaultSessionSnapshot,
+          public: {
+            ...defaultSessionSnapshot.public,
+            userId: "player-1",
+          },
+        },
+      },
+      game: {
+        "game-123": {
+          ...defaultGameSnapshot,
+          public: {
+            ...defaultGameSnapshot.public,
+            currentTurn: "player-1",
+            round: "2R", // Need two runs
+            players: [
+              {
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [
+                  // First potential run
+                  { id: "1", suit: "hearts", rank: "4" },
+                  { id: "2", suit: "hearts", rank: "5" },
+                  { id: "3", suit: "hearts", rank: "6" },
+                  { id: "4", suit: "hearts", rank: "7" },
+                  // Second potential run
+                  { id: "5", suit: "diamonds", rank: "8" },
+                  { id: "6", suit: "diamonds", rank: "9" },
+                  { id: "7", suit: "diamonds", rank: "10" },
+                  { id: "8", suit: "diamonds", rank: "J" },
+                  // Random cards to fill up hand
+                  { id: "9", suit: "clubs", rank: "2" },
+                  { id: "10", suit: "spades", rank: "K" },
+                  { id: "11", suit: "hearts", rank: "A" },
+                  { id: "12", suit: "clubs", rank: "3" },
+                  { id: "13", suit: "spades", rank: "4" },
+                  { id: "14", suit: "hearts", rank: "8" },
+                  { id: "15", suit: "diamonds", rank: "2" },
+                  { id: "16", suit: "clubs", rank: "Q" },
+                  { id: "17", suit: "spades", rank: "10" },
+                  { id: "18", suit: "hearts", rank: "3" }, // Just drew this card
+                ],
+                isDown: false,
+                buyCount: 2,
+                runs: [],
+                sets: [],
+              },
+            ],
+          },
+        },
+      },
+    },
+  },
+};
+
+export const MultipleOptions: Story = {
+  parameters: {
+    actorKit: {
+      session: {
+        "session-123": {
+          ...defaultSessionSnapshot,
+          public: {
+            ...defaultSessionSnapshot.public,
+            userId: "player-1",
+          },
+        },
+      },
+      game: {
+        "game-123": {
+          ...defaultGameSnapshot,
+          public: {
+            ...defaultGameSnapshot.public,
+            currentTurn: "player-1",
+            round: "1R1S", // Need one run and one set
+            players: [
+              {
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [
+                  // First possible run
+                  { id: "1", suit: "hearts", rank: "4" },
+                  { id: "2", suit: "hearts", rank: "5" },
+                  { id: "3", suit: "hearts", rank: "6" },
+                  { id: "4", suit: "hearts", rank: "7" },
+                  // Second possible run
+                  { id: "5", suit: "diamonds", rank: "8" },
+                  { id: "6", suit: "diamonds", rank: "9" },
+                  { id: "7", suit: "diamonds", rank: "10" },
+                  { id: "8", suit: "diamonds", rank: "J" },
+                  // First possible set
+                  { id: "9", suit: "hearts", rank: "Q" },
+                  { id: "10", suit: "diamonds", rank: "Q" },
+                  { id: "11", suit: "spades", rank: "Q" },
+                  // Second possible set
+                  { id: "12", suit: "hearts", rank: "K" },
+                  { id: "13", suit: "diamonds", rank: "K" },
+                  { id: "14", suit: "spades", rank: "K" },
+                ],
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
+              },
+            ],
+          },
+        },
+      },
+    },
+  },
+};
+
+export const ChooseDiscard: Story = {
+  parameters: {
+    actorKit: {
+      session: {
+        "session-123": {
+          ...defaultSessionSnapshot,
+          public: {
+            ...defaultSessionSnapshot.public,
+            userId: "player-1",
+          },
+        },
+      },
+      game: {
+        "game-123": {
+          ...defaultGameSnapshot,
+          public: {
+            ...defaultGameSnapshot.public,
+            currentTurn: "player-1",
+            turnPhase: "discard",  // Important: shows we're in discard phase
+            round: "2R",
+            players: [
+              {
+                id: "player-1",
+                name: "You",
+                score: 0,
+                hand: [
+                  // First potential run
+                  { id: "1", suit: "hearts", rank: "4" },
+                  { id: "2", suit: "hearts", rank: "5" },
+                  { id: "3", suit: "hearts", rank: "6" },
+                  { id: "4", suit: "hearts", rank: "7" },
+                  // Second potential run
+                  { id: "5", suit: "diamonds", rank: "8" },
+                  { id: "6", suit: "diamonds", rank: "9" },
+                  { id: "7", suit: "diamonds", rank: "10" },
+                  { id: "8", suit: "diamonds", rank: "J" },
+                  // Just drew this card - might want to discard
+                  { id: "9", suit: "clubs", rank: "2" },
+                ],
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
+              },
+            ],
+            discardPile: [
+              { id: "discard-1", suit: "spades", rank: "K" },
+            ],
+          },
+        },
+      },
+    },
+  },
+};

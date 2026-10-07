@@ -1,30 +1,21 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { expect } from "@storybook/test";
 import { withActorKit } from "actor-kit/storybook";
-import { createActorKitMockClient } from "actor-kit/test";
-import React from "react";
 import { SpectatorView } from "../app/components/spectator-view";
 import { GameContext } from "../app/game.context";
 import type { GameMachine } from "../app/game.machine";
-import { SessionContext } from "../app/session.context";
-import type { SessionMachine } from "../app/session.machine";
-import { defaultGameSnapshot, defaultSessionSnapshot } from "./utils";
+import { defaultGameSnapshot } from "./utils";
 
 const meta = {
   title: "Views/SpectatorView",
   component: SpectatorView,
   parameters: {
     layout: "fullscreen",
-    autoplay: true,
-  },
-  args: {
-    host: "dev.triviajam.tv", // Default host value
+    viewport: {
+      defaultViewport: "tablet",
+      defaultOrientation: "landscape",
+    }
   },
   decorators: [
-    withActorKit<SessionMachine>({
-      actorType: "session",
-      context: SessionContext,
-    }),
     withActorKit<GameMachine>({
       actorType: "game",
       context: GameContext,
@@ -33,28 +24,42 @@ const meta = {
 } satisfies Meta<typeof SpectatorView>;
 
 export default meta;
-type Story = StoryObj<typeof SpectatorView>;
+type Story = StoryObj<typeof meta>;
 
-export const Docs: Story = {
+export const InGame: Story = {
   parameters: {
     actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "spectator-123",
-          },
-        },
-      },
       game: {
         "game-123": {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
+            hostId: "host-123",
+            currentTurn: "player-1",
             players: [
-              { id: "player-1", name: "Player 1", score: 0 },
-              { id: "player-2", name: "Player 2", score: 0 },
+              { 
+                id: "host-123", 
+                name: "Host", 
+                score: 0, 
+                hand: [
+                  { suit: "hearts", rank: "A" },
+                  { suit: "diamonds", rank: "2" },
+                  { suit: "clubs", rank: "3" },
+                ],
+                isDown: false,
+                buyCount: 0,
+              },
+              { 
+                id: "player-1", 
+                name: "Player 1", 
+                score: 0, 
+                hand: [
+                  { suit: "spades", rank: "K" },
+                  { suit: "hearts", rank: "Q" },
+                ],
+                isDown: true,
+                buyCount: 0,
+              },
             ],
           },
         },
@@ -63,325 +68,656 @@ export const Docs: Story = {
   },
 };
 
-export const InLobby: Story = {
+export const PlayerDown: Story = {
   parameters: {
     actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "spectator-123",
-          },
-        },
-      },
       game: {
         "game-123": {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
+            hostId: "host-123",
+            currentTurn: "player-2",
             players: [
-              { id: "player-1", name: "Player 1", score: 0 },
-              { id: "player-2", name: "Player 2", score: 0 },
+              { 
+                id: "host-123", 
+                name: "Host", 
+                score: 0, 
+                hand: Array(11).fill(null).map((_, i) => ({
+                  suit: ["hearts", "diamonds", "clubs", "spades"][i % 4],
+                  rank: ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"][i % 13],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              { 
+                id: "player-1", 
+                name: "Player 1", 
+                score: 0, 
+                hand: [
+                  { suit: "spades", rank: "K" },
+                  { suit: "hearts", rank: "Q" },
+                ],
+                isDown: true,
+                buyCount: 0,
+                runs: [
+                  // A run of hearts
+                  [
+                    { suit: "hearts", rank: "7" },
+                    { suit: "hearts", rank: "8" },
+                    { suit: "hearts", rank: "9" },
+                  ],
+                  // A run of clubs
+                  [
+                    { suit: "clubs", rank: "4" },
+                    { suit: "clubs", rank: "5" },
+                    { suit: "clubs", rank: "6" },
+                  ],
+                ],
+                sets: [
+                  // A set of Jacks
+                  [
+                    { suit: "diamonds", rank: "J" },
+                    { suit: "clubs", rank: "J" },
+                    { suit: "spades", rank: "J" },
+                  ],
+                ],
+              },
+              { 
+                id: "player-2", 
+                name: "Player 2", 
+                score: 0, 
+                hand: Array(11).fill(null).map((_, i) => ({
+                  suit: ["hearts", "diamonds", "clubs", "spades"][i % 4],
+                  rank: ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"][i % 13],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
             ],
           },
         },
       },
     },
-  },
-  play: async ({ canvas, mount, step }) => {
-    await step("Mount component with initial state", async () => {
-      await mount(<SpectatorView host="dev.triviajam.tv" />);
-    });
-
-    await step("Verify lobby elements", async () => {
-      const title = await canvas.findByText(/waiting for game to start/i);
-      expect(title).toBeInTheDocument();
-
-      const player1 = await canvas.findByText("Player 1");
-      expect(player1).toBeInTheDocument();
-      const player2 = await canvas.findByText("Player 2");
-      expect(player2).toBeInTheDocument();
-    });
-
-    await step("Verify empty slots", async () => {
-      const emptySlots = await canvas.findAllByText("Empty Slot");
-      expect(emptySlots).toHaveLength(8);
-    });
-
-    await step("Verify QR code section", async () => {
-      const qrCodeSection = await canvas.findByTestId("qr-code-section");
-      expect(qrCodeSection).toBeInTheDocument();
-
-      const qrCode = await canvas.findByTestId("game-qr-code");
-      expect(qrCode).toBeInTheDocument();
-
-      const qrLabel = await canvas.findByTestId("qr-code-label");
-      expect(qrLabel).toHaveTextContent(/scan to join the game/i);
-    });
   },
 };
 
-export const WithBuzzerQueue: Story = {
+export const EightPlayers: Story = {
   parameters: {
     actorKit: {
-      session: {
-        "session-123": defaultSessionSnapshot,
-      },
       game: {
         "game-123": {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: {
-              text: "What is the capital of France?",
-            },
-            buzzerQueue: ["player-1", "player-2"],
+            hostId: "host-123",
+            currentTurn: "player-3",
+            round: "1R1S",
             players: [
-              { id: "player-1", name: "Player 1", score: 0 },
-              { id: "player-2", name: "Player 2", score: 0 },
+              { 
+                id: "host-123", 
+                name: "Host", 
+                score: 50,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  suit: ["hearts", "diamonds"][i % 2],
+                  rank: ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              { 
+                id: "player-1", 
+                name: "Alice", 
+                score: 30,
+                hand: [{ suit: "spades", rank: "K" }],
+                isDown: true,
+                buyCount: 0,
+                runs: [
+                  [
+                    { suit: "hearts", rank: "4" },
+                    { suit: "hearts", rank: "5" },
+                    { suit: "hearts", rank: "6" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { suit: "diamonds", rank: "Q" },
+                    { suit: "clubs", rank: "Q" },
+                    { suit: "spades", rank: "Q" },
+                  ],
+                ],
+              },
+              { 
+                id: "player-2", 
+                name: "Bob", 
+                score: 40,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  suit: ["clubs", "spades"][i % 2],
+                  rank: ["K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3"][i],
+                })),
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
+              },
+              { 
+                id: "player-3", 
+                name: "Charlie", 
+                score: 35,
+                hand: [{ suit: "diamonds", rank: "2" }],
+                isDown: true,
+                buyCount: 2,
+                runs: [
+                  [
+                    { suit: "diamonds", rank: "7" },
+                    { suit: "diamonds", rank: "8" },
+                    { suit: "diamonds", rank: "9" },
+                    { suit: "diamonds", rank: "10" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { suit: "hearts", rank: "K" },
+                    { suit: "diamonds", rank: "K" },
+                    { suit: "spades", rank: "K" },
+                  ],
+                ],
+              },
+              { 
+                id: "player-4", 
+                name: "Diana", 
+                score: 45,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  suit: ["hearts", "clubs"][i % 2],
+                  rank: ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              { 
+                id: "player-5", 
+                name: "Ethan", 
+                score: 25,
+                hand: [{ suit: "clubs", rank: "A" }],
+                isDown: true,
+                buyCount: 1,
+                runs: [
+                  [
+                    { suit: "spades", rank: "8" },
+                    { suit: "spades", rank: "9" },
+                    { suit: "spades", rank: "10" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { suit: "hearts", rank: "3" },
+                    { suit: "diamonds", rank: "3" },
+                    { suit: "clubs", rank: "3" },
+                  ],
+                ],
+              },
+              { 
+                id: "player-6", 
+                name: "Fiona", 
+                score: 0,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  suit: ["diamonds", "spades"][i % 2],
+                  rank: ["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4"][i],
+                })),
+                isDown: false,
+                buyCount: 3,
+                runs: [],
+                sets: [],
+              },
+              { 
+                id: "player-7", 
+                name: "George", 
+                score: 0,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  suit: ["clubs", "hearts"][i % 2],
+                  rank: ["5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
             ],
+            scores: {
+              "1R1S": { "host-123": 50, "player-1": 30, "player-2": 40, "player-3": 35, "player-4": 45, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2S": { "host-123": 40, "player-1": 45, "player-2": 30, "player-3": 35, "player-4": 30, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2R": { "host-123": 35, "player-1": 25, "player-2": 30, "player-3": 30, "player-4": 30, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2R1S": null,
+              "2S1R": null,
+              "3R": null,
+              "3S": null,
+            }
           },
-          value: { active: "answerValidation" },
         },
       },
     },
-  },
-  play: async ({ canvas, mount, step }) => {
-    const gameClient = createActorKitMockClient<GameMachine>({
-      initialSnapshot: {
-        ...defaultGameSnapshot,
-        public: {
-          ...defaultGameSnapshot.public,
-          gameStatus: "active",
-          currentQuestion: {
-            text: "What is the capital of France?",
-          },
-          buzzerQueue: [],
-          players: [
-            { id: "player-1", name: "Player 1", score: 0 },
-            { id: "player-2", name: "Player 2", score: 0 },
-          ],
-        },
-        value: { active: "questionActive" },
-      },
-    });
-
-    await step("Mount component with initial state", async () => {
-      await mount(
-        <GameContext.ProviderFromClient client={gameClient}>
-          <SpectatorView host="dev.triviajam.tv" />
-        </GameContext.ProviderFromClient>
-      );
-    });
-
-    await step("Simulate first player buzzing in", async () => {
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = ["player-1"];
-      });
-
-      const currentAnswerer = await canvas.findByTestId("current-answerer");
-      expect(currentAnswerer).toHaveTextContent("Player 1");
-    });
-
-    await step("Simulate second player buzzing in", async () => {
-      gameClient.produce((draft) => {
-        draft.public.buzzerQueue = ["player-1", "player-2"];
-      });
-
-      const queuePlayer = await canvas.findByTestId("queue-player-player-2");
-      expect(queuePlayer).toBeInTheDocument();
-    });
   },
 };
 
-export const PlayerAnsweredCorrectly: Story = {
+export const ComplexGame: Story = {
   parameters: {
     actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "spectator-123",
-          },
-        },
-      },
       game: {
         "game-123": {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: null,
-            lastAnswerResult: {
-              playerId: "player-1",
-              playerName: "Player 1",
-              correct: true,
-            },
+            hostId: "host-123",
+            currentTurn: "player-3",
+            round: "3R",
             players: [
-              { id: "player-1", name: "Player 1", score: 1 },
-              { id: "player-2", name: "Player 2", score: 0 },
+              { // Host
+                id: "host-123", 
+                name: "Host", 
+                score: 50,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["hearts", "diamonds"][i % 2],
+                  rank: ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              { // Alice
+                id: "player-1", 
+                name: "Alice", 
+                score: 30,
+                hand: [{ type: 'standard', suit: "spades", rank: "K" }],
+                isDown: true,
+                buyCount: 0,
+                runs: [
+                  [
+                    { type: 'standard', suit: "hearts", rank: "4" },
+                    { type: 'standard', suit: "hearts", rank: "5" },
+                    { type: 'standard', suit: "hearts", rank: "6" },
+                    { type: 'standard', suit: "hearts", rank: "7" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { type: 'standard', suit: "diamonds", rank: "Q" },
+                    { type: 'standard', suit: "clubs", rank: "Q" },
+                    { type: 'standard', suit: "spades", rank: "Q" },
+                  ],
+                ],
+              },
+              { // Bob
+                id: "player-2", 
+                name: "Bob", 
+                score: 40,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["clubs", "spades"][i % 2],
+                  rank: ["K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3"][i],
+                })),
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
+              },
+              { // Charlie
+                id: "player-3", 
+                name: "Charlie", 
+                score: 35,
+                hand: [{ type: 'standard', suit: "diamonds", rank: "2" }],
+                isDown: true,
+                buyCount: 2,
+                runs: [
+                  [
+                    { type: 'standard', suit: "diamonds", rank: "7" },
+                    { type: 'standard', suit: "diamonds", rank: "8" },
+                    { type: 'standard', suit: "diamonds", rank: "9" },
+                    { type: 'standard', suit: "diamonds", rank: "10" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { type: 'standard', suit: "hearts", rank: "K" },
+                    { type: 'standard', suit: "diamonds", rank: "K" },
+                    { type: 'standard', suit: "spades", rank: "K" },
+                  ],
+                ],
+              },
+              { // Diana
+                id: "player-4", 
+                name: "Diana", 
+                score: 45,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["hearts", "clubs"][i % 2],
+                  rank: ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              { // Ethan
+                id: "player-5", 
+                name: "Ethan", 
+                score: 25,
+                hand: [{ type: 'standard', suit: "clubs", rank: "A" }],
+                isDown: true,
+                buyCount: 1,
+                runs: [
+                  [
+                    { type: 'standard', suit: "spades", rank: "8" },
+                    { type: 'standard', suit: "spades", rank: "9" },
+                    { type: 'standard', suit: "spades", rank: "10" },
+                    { type: 'standard', suit: "spades", rank: "J" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { type: 'standard', suit: "hearts", rank: "3" },
+                    { type: 'standard', suit: "diamonds", rank: "3" },
+                    { type: 'standard', suit: "clubs", rank: "3" },
+                  ],
+                ],
+              },
+              { // Fiona
+                id: "player-6", 
+                name: "Fiona", 
+                score: 0,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["diamonds", "spades"][i % 2],
+                  rank: ["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4"][i],
+                })),
+                isDown: false,
+                buyCount: 3,
+                runs: [],
+                sets: [],
+              },
+              { // George
+                id: "player-7", 
+                name: "George", 
+                score: 0,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["clubs", "hearts"][i % 2],
+                  rank: ["5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
             ],
+            scores: {
+              "1R1S": { "host-123": 50, "player-1": 30, "player-2": 40, "player-3": 35, "player-4": 45, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2S": { "host-123": 40, "player-1": 45, "player-2": 30, "player-3": 35, "player-4": 30, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2R": { "host-123": 35, "player-1": 25, "player-2": 30, "player-3": 30, "player-4": 30, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "3R": null,
+              "2R1S": null,
+              "3S": null,
+            }
           },
-          value: { active: "questionPrep" },
         },
       },
     },
-  },
-  play: async ({ canvas, mount, step }) => {
-    await step("Mount component with initial state", async () => {
-      await mount(<SpectatorView host="dev.triviajam.tv" />);
-    });
-
-    await step("Verify celebration elements using test IDs", async () => {
-      const correctMessage = canvas.getByTestId("correct-message");
-      expect(correctMessage).toBeInTheDocument();
-      expect(correctMessage).toHaveTextContent(/correct/i);
-
-      const winnerName = canvas.getByTestId("winner-name");
-      expect(winnerName).toBeInTheDocument();
-      expect(winnerName).toHaveTextContent("Player 1");
-
-      const rankDisplay = canvas.getByTestId("rank-display");
-      expect(rankDisplay).toBeInTheDocument();
-      expect(rankDisplay).toHaveTextContent("#1");
-
-      const scoreDisplay = canvas.getByTestId("score-display");
-      expect(scoreDisplay).toBeInTheDocument();
-      expect(scoreDisplay).toHaveTextContent("Score: 1");
-    });
   },
 };
 
-export const GameFinished: Story = {
+export const TwoRunsOneSet: Story = {
   parameters: {
     actorKit: {
-      session: {
-        "session-123": {
-          ...defaultSessionSnapshot,
-          public: {
-            ...defaultSessionSnapshot.public,
-            userId: "spectator-123",
-          },
-        },
-      },
       game: {
         "game-123": {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "finished",
-            winner: "player-1",
+            hostId: "host-123",
+            currentTurn: "player-3",
+            round: "2R1S",
             players: [
-              { id: "player-1", name: "Player 1", score: 3 },
-              { id: "player-2", name: "Player 2", score: 1 },
+              { // Host
+                id: "host-123", 
+                name: "Host", 
+                score: 50,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["hearts", "diamonds"][i % 2],
+                  rank: ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              { // Alice - Down with 2 runs and 1 set
+                id: "player-1", 
+                name: "Alice", 
+                score: 30,
+                hand: [{ type: 'standard', suit: "spades", rank: "K" }],
+                isDown: true,
+                buyCount: 0,
+                runs: [
+                  [
+                    { type: 'standard', suit: "hearts", rank: "4" },
+                    { type: 'standard', suit: "hearts", rank: "5" },
+                    { type: 'standard', suit: "hearts", rank: "6" },
+                    { type: 'standard', suit: "hearts", rank: "7" },
+                  ],
+                  [
+                    { type: 'standard', suit: "diamonds", rank: "8" },
+                    { type: 'standard', suit: "diamonds", rank: "9" },
+                    { type: 'standard', suit: "diamonds", rank: "10" },
+                    { type: 'standard', suit: "diamonds", rank: "J" },
+                  ],
+                ],
+                sets: [
+                  [
+                    { type: 'standard', suit: "diamonds", rank: "Q" },
+                    { type: 'standard', suit: "clubs", rank: "Q" },
+                    { type: 'standard', suit: "spades", rank: "Q" },
+                  ],
+                ],
+              },
+              // ... rest of players similar to ComplexGame ...
             ],
+            scores: {
+              "1R1S": { "host-123": 50, "player-1": 30, "player-2": 40, "player-3": 35, "player-4": 45, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2S": { "host-123": 40, "player-1": 45, "player-2": 30, "player-3": 35, "player-4": 30, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2R": { "host-123": 35, "player-1": 25, "player-2": 30, "player-3": 30, "player-4": 30, "player-5": 25, "player-6": 0, "player-7": 0 },
+              "2S1R": null,
+              "2R1S": null,
+              "3S": null,
+              "3R": null,
+            }
           },
-          value: "finished",
         },
       },
     },
-  },
-  play: async ({ canvas, mount, step }) => {
-    await step("Mount component with initial state", async () => {
-      await mount(<SpectatorView host="dev.triviajam.tv" />);
-    });
-
-    await step("Verify game over elements using test IDs", async () => {
-      const gameOverTitle = await canvas.findByTestId("game-over-title");
-      expect(gameOverTitle).toBeInTheDocument();
-      expect(gameOverTitle).toHaveTextContent(/game over/i);
-    });
-
-    await step("Find winner announcement section", async () => {
-      const winnerSection = await canvas.findByTestId("winner-announcement");
-      expect(winnerSection).toBeInTheDocument();
-      expect(winnerSection).toHaveTextContent(/player 1.*wins/i);
-    });
-
-    await step("Find Final Scores heading", async () => {
-      const scoresHeading = await canvas.findByTestId("final-scores-heading");
-      expect(scoresHeading).toBeInTheDocument();
-      expect(scoresHeading).toHaveTextContent(/final scores/i);
-    });
-
-    await step("Verify player scores using test IDs", async () => {
-      const player1Score = await canvas.findByTestId("player-score-player-1");
-      expect(player1Score).toBeInTheDocument();
-      expect(player1Score).toHaveTextContent("Player 1");
-      expect(player1Score).toHaveTextContent("3");
-
-      const player2Score = await canvas.findByTestId("player-score-player-2");
-      expect(player2Score).toBeInTheDocument();
-      expect(player2Score).toHaveTextContent("Player 2");
-      expect(player2Score).toHaveTextContent("1");
-    });
   },
 };
 
-export const WithIncorrectAnswers: Story = {
+export const TwoSets: Story = {
   parameters: {
     actorKit: {
-      session: {
-        "session-123": defaultSessionSnapshot,
-      },
       game: {
         "game-123": {
           ...defaultGameSnapshot,
           public: {
             ...defaultGameSnapshot.public,
-            gameStatus: "active",
-            currentQuestion: {
-              text: "What is the capital of France?",
-            },
-            buzzerQueue: ["player-3"], // Current player trying
-            previousAnswers: [
-              { playerId: "player-1", playerName: "Player 1", correct: false },
-              { playerId: "player-2", playerName: "Player 2", correct: false },
-            ],
+            hostId: "host-123",
+            currentTurn: "player-2",
+            round: "2S",
             players: [
-              { id: "player-1", name: "Player 1", score: 0 },
-              { id: "player-2", name: "Player 2", score: 0 },
-              { id: "player-3", name: "Player 3", score: 0 },
+              { // Host
+                id: "host-123", 
+                name: "Host", 
+                score: 40,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["hearts", "diamonds"][i % 2],
+                  rank: ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J"][i],
+                })),
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
+              },
+              { // Player down with two sets
+                id: "player-1", 
+                name: "Alice", 
+                score: 35,
+                hand: [{ type: 'standard', suit: "spades", rank: "K" }],
+                isDown: true,
+                buyCount: 0,
+                runs: [],
+                sets: [
+                  [
+                    { type: 'standard', suit: "diamonds", rank: "Q" },
+                    { type: 'standard', suit: "clubs", rank: "Q" },
+                    { type: 'standard', suit: "spades", rank: "Q" },
+                  ],
+                  [
+                    { type: 'standard', suit: "hearts", rank: "7" },
+                    { type: 'standard', suit: "diamonds", rank: "7" },
+                    { type: 'standard', suit: "clubs", rank: "7" },
+                  ],
+                ],
+              },
+              { // Player with joker
+                id: "player-2", 
+                name: "Bob", 
+                score: 30,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["clubs", "spades"][i % 2],
+                  rank: ["K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3"][i],
+                })),
+                isDown: false,
+                buyCount: 2,
+                runs: [],
+                sets: [],
+              },
             ],
+            scores: {
+              "1R1S": { "host-123": 50, "player-1": 35, "player-2": 30 },
+              "2S": null,
+              "2R": null,
+              "2S1R": null,
+              "2R1S": null,
+              "3R": null,
+              "3S": null,
+            }
           },
-          value: { active: "answerValidation" },
         },
       },
     },
   },
-  play: async ({ canvas, mount, step }) => {
-    await step("Mount component with initial state", async () => {
-      await mount(<SpectatorView host="dev.triviajam.tv" />);
-    });
+};
 
-    await step("Verify incorrect answers section exists", async () => {
-      const incorrectAnswersSection = await canvas.findByText(
-        /previous incorrect answers/i
-      );
-      expect(incorrectAnswersSection).toBeInTheDocument();
-    });
-
-    await step("Verify incorrect answers", async () => {
-      // Get all incorrect answer elements first
-      const incorrectAnswers = await canvas.findAllByTestId(
-        /^incorrect-answer-/
-      );
-      expect(incorrectAnswers).toHaveLength(2);
-
-      // Then verify their styling
-      incorrectAnswers.forEach((answer) => {
-        expect(answer.closest("div")).toHaveClass("bg-red-500/10");
-      });
-    });
-
-    await step("Verify current player in buzzer queue", async () => {
-      const currentAnswerer = await canvas.findByTestId("current-answerer");
-      expect(currentAnswerer).toBeInTheDocument();
-      expect(currentAnswerer).toHaveTextContent("Player 3");
-      expect(currentAnswerer).toHaveTextContent(/is answering/i);
-    });
+export const ThreeSets: Story = {
+  parameters: {
+    actorKit: {
+      game: {
+        "game-123": {
+          ...defaultGameSnapshot,
+          public: {
+            ...defaultGameSnapshot.public,
+            hostId: "host-123",
+            currentTurn: "player-3",
+            round: "3S",
+            players: [
+              { // Host
+                id: "host-123", 
+                name: "Host", 
+                score: 45,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["hearts", "diamonds"][i % 2],
+                  rank: ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J"][i],
+                })),
+                isDown: false,
+                buyCount: 0,
+                runs: [],
+                sets: [],
+              },
+              { // Player with three sets
+                id: "player-1", 
+                name: "Alice", 
+                score: 40,
+                hand: [{ type: 'standard', suit: "spades", rank: "K" }],
+                isDown: true,
+                buyCount: 1,
+                runs: [],
+                sets: [
+                  [
+                    { type: 'standard', suit: "diamonds", rank: "A" },
+                    { type: 'standard', suit: "clubs", rank: "A" },
+                    { type: 'standard', suit: "spades", rank: "A" },
+                  ],
+                  [
+                    { type: 'standard', suit: "hearts", rank: "7" },
+                    { type: 'standard', suit: "diamonds", rank: "7" },
+                    { type: 'standard', suit: "clubs", rank: "7" },
+                  ],
+                  [
+                    { type: 'standard', suit: "hearts", rank: "J" },
+                    { type: 'standard', suit: "diamonds", rank: "J" },
+                    { type: 'joker' },
+                  ],
+                ],
+              },
+              { // Player 2
+                id: "player-2", 
+                name: "Bob", 
+                score: 35,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["clubs", "spades"][i % 2],
+                  rank: ["K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3"][i],
+                })),
+                isDown: false,
+                buyCount: 2,
+                runs: [],
+                sets: [],
+              },
+              { // Player 3
+                id: "player-3", 
+                name: "Charlie", 
+                score: 30,
+                hand: Array(11).fill(null).map((_, i) => ({
+                  type: 'standard',
+                  suit: ["diamonds", "hearts"][i % 2],
+                  rank: ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q"][i],
+                })),
+                isDown: false,
+                buyCount: 1,
+                runs: [],
+                sets: [],
+              },
+            ],
+            scores: {
+              "1R1S": { "host-123": 45, "player-1": 40, "player-2": 35, "player-3": 30 },
+              "2S": { "host-123": 40, "player-1": 35, "player-2": 30, "player-3": 25 },
+              "2R": { "host-123": 35, "player-1": 30, "player-2": 25, "player-3": 20 },
+              "2S1R": { "host-123": 25, "player-1": 20, "player-2": 15, "player-3": 10 },
+              "2R1S": null,
+              "3S": null,
+              "3R": null,
+            }
+          },
+        },
+      },
+    },
   },
 };

@@ -1,152 +1,167 @@
-import { motion, AnimatePresence } from 'framer-motion'
-import { GameContext } from '../game.context'
-import { SessionContext } from '../session.context'
-import { Users, Copy, Crown } from 'lucide-react'
+import { useCallback, useState, useEffect } from "react";
+import { Button } from "~/components/ui/button";
+import { GameContext } from "~/game.context";
+import { SessionContext } from "~/session.context";
+import { Share2, Copy } from "lucide-react";
+
+interface Player {
+  id: string;
+  name: string;
+  score: number;
+  hand: any[];
+  isDown: boolean;
+  buyCount: number;
+}
 
 export function LobbyView() {
+  const [copied, setCopied] = useState(false);
+  const [canShare, setCanShare] = useState(false);
+  const client = GameContext.useClient();
   const gameState = GameContext.useSelector((state) => state.public);
   const sessionState = SessionContext.useSelector((state) => state.public);
-  const sendGameEvent = GameContext.useSend();
+  const {
+    gamePhase,
+    players,
+    hostId,
+    gameCode,
+    settings,
+  } = gameState;
 
-  const isHost = sessionState.userId === gameState.hostId;
-  const emptySlots = Array(gameState.settings.maxPlayers - gameState.players.length).fill(null);
+  const isHost = sessionState.userId === hostId;
+  const canStartGame = players.length >= 3 && players.length <= settings.maxPlayers;
 
-  const copyGameCode = () => {
-    navigator.clipboard.writeText(gameState.id);
-  };
+  const handleCopy = useCallback(async () => {
+    const url = window.location.href;
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    try {
+      await navigator.share({
+        title: "Join my Run Set Jimmy game!",
+        url: window.location.href,
+      });
+    } catch (err) {
+      console.error("Error sharing:", err);
+    }
+  }, []);
+
+  const handleRemovePlayer = useCallback((playerId: string) => {
+    client.send({ type: "REMOVE_PLAYER", playerId });
+  }, [client]);
+
+  const handleStartGame = useCallback(() => {
+    client.send({ type: "START_GAME" });
+  }, [client]);
+
+  // Create array of all possible player slots
+  const playerSlots = Array.from({ length: settings.maxPlayers }, (_, i) => {
+    return players[i] || null;
+  });
+
+  // Check if Web Share API is available
+  useEffect(() => {
+    setCanShare(typeof navigator !== 'undefined' && !!navigator.share);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Animation */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"
-            animate={{
-              rotate: [0, 360],
-              scale: [1, 1.2, 1],
-            }}
-            transition={{
-              duration: 20,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="relative z-10 w-full max-w-2xl mx-auto">
-        <h1 className="text-5xl font-bold mb-12 text-center bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
-          Trivia Game Lobby
-        </h1>
-
-        {/* Game Code Section */}
-        <div className="mb-12">
-          <div className="text-center mb-2 text-indigo-300 text-sm font-medium">GAME CODE</div>
-          <div className="relative">
-            <motion.div
-              className="text-6xl font-bold text-center p-6 bg-indigo-600/30 backdrop-blur-sm rounded-2xl shadow-lg border border-indigo-500/20 cursor-pointer hover:bg-indigo-600/40 transition-colors"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={copyGameCode}
-            >
-              {gameState.id}
-              <motion.div
-                className="absolute top-2 right-2 text-indigo-300/60 hover:text-indigo-300"
-                whileHover={{ scale: 1.1 }}
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+            Run Set Jimmy
+          </h1>
+          <div className="flex flex-col gap-4 items-center">
+            {isHost && (
+              <Button
+                disabled={!canStartGame}
+                onClick={handleStartGame}
+                className={`text-lg px-8 py-3 ${
+                  canStartGame 
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+                    : 'bg-gray-600 cursor-not-allowed'
+                }`}
               >
-                <Copy size={20} />
-              </motion.div>
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Players Section */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-xl p-8 mb-8 border border-gray-700/50">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center">
-              <Users className="text-indigo-400 mr-3" size={24} />
-              <h2 className="text-2xl font-semibold text-indigo-300">
-                Players ({gameState.players.length}/{gameState.settings.maxPlayers})
-              </h2>
+                Start Game
+              </Button>
+            )}
+            <div className="flex gap-2">
+              <Button
+                onClick={handleCopy}
+                className="text-lg bg-gray-800 hover:bg-gray-700 transition-colors flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                {copied ? "Copied!" : "Copy Link"}
+              </Button>
+              {canShare && (
+                <Button
+                  onClick={handleShare}
+                  className="text-lg bg-gray-800 hover:bg-gray-700 transition-colors flex items-center gap-2"
+                >
+                  <Share2 className="w-4 h-4" />
+                  Share
+                </Button>
+              )}
             </div>
-          </div>
-
-          <div className="space-y-3">
-            <AnimatePresence mode="popLayout">
-              {/* Host */}
-              <motion.div
-                key="host"
-                className="flex items-center bg-indigo-600/20 rounded-xl p-4 border border-indigo-500/20"
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <Crown className="text-yellow-400 mr-3" size={20} />
-                <span className="font-medium">{gameState.hostName}</span>
-                <span className="ml-2 text-indigo-400/60 text-sm">(Host)</span>
-              </motion.div>
-
-              {/* Players */}
-              {gameState.players.map((player, index) => (
-                <motion.div
-                  key={player.id}
-                  className="bg-gray-700/50 rounded-xl p-4 border border-gray-600/20"
-                  initial={{ opacity: 0, x: -50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 50 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  {player.name}
-                </motion.div>
-              ))}
-
-              {/* Empty Slots */}
-              {emptySlots.map((_, index) => (
-                <motion.div
-                  key={`empty-${index}`}
-                  className="border-2 border-dashed border-gray-700/30 rounded-xl p-4 text-gray-500"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.5 }}
-                  transition={{ delay: (gameState.players.length + index) * 0.1 }}
-                >
-                  Waiting for player...
-                </motion.div>
-              ))}
-            </AnimatePresence>
+            {isHost && !canStartGame && (
+              <p className="text-gray-400">
+                {players.length < 3 
+                  ? "Need at least 3 players to start"
+                  : "Maximum number of players reached"}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Action Section */}
-        <div className="text-center">
-          {isHost && gameState.gameStatus === "lobby" && (
-            <motion.button
-              onClick={() => sendGameEvent({ type: "START_GAME" })}
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 px-8 rounded-xl shadow-lg hover:from-indigo-500 hover:to-purple-500 transition-all"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              aria-label="Start Game"
-            >
-              Start Game
-            </motion.button>
-          )}
-
-          {!isHost && gameState.gameStatus === "lobby" && (
-            <motion.div
-              className="text-xl text-indigo-300"
-              animate={{
-                y: [0, -10, 0],
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            >
-              Waiting for host to start the game...
-            </motion.div>
-          )}
+        <div className="bg-gray-800 rounded-lg p-6 mb-8 shadow-lg">
+          <h2 className="text-2xl font-bold mb-4 text-blue-400">
+            Players ({players.length}/{settings.maxPlayers})
+          </h2>
+          <ul className="space-y-3">
+            {playerSlots.map((player, index) => (
+              <li key={player?.id || `empty-${index}`}>
+                {index === 3 && (
+                  <div className="border-t border-gray-700 my-4 relative">
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-gray-800 px-2 text-xs text-gray-400">
+                      Minimum Players
+                    </span>
+                  </div>
+                )}
+                <div className={`flex justify-between items-center rounded-lg p-3 ${
+                  player ? 'bg-gray-700' : 'bg-gray-800/50'
+                }`}>
+                  {player ? (
+                    <>
+                      <span className="text-lg">
+                        {player.name}
+                        {player.id === hostId && (
+                          <span className="ml-2 text-sm text-blue-400">(Host)</span>
+                        )}
+                      </span>
+                      {isHost && player.id !== hostId && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleRemovePlayer(player.id)}
+                          className="hover:bg-red-700 transition-colors"
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-lg text-gray-500 italic">
+                      Waiting for player...
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,7 +1,14 @@
 import { ActorKitStateMachine } from "actor-kit";
 import { produce } from "immer";
 import { and, assign, DoneActorEvent, fromPromise, setup } from "xstate";
-import type { GameEvent, GameInput, GameServerContext, GamePublicContext } from "./game.types";
+import type { 
+  GameEvent, 
+  GameInput, 
+  GameServerContext, 
+  GamePhase,
+  PlayableCard 
+} from "./game.types";
+import { ROUND_REQUIREMENTS } from "./game.types";
 
 export const gameMachine = setup({
   types: {} as {
@@ -10,11 +17,20 @@ export const gameMachine = setup({
     input: GameInput;
   },
   guards: {
-    isHost: ({ context, event }) => event.caller.id === context.public.hostId,
-    canBuzzIn: ({ context }) => !!context.public.currentQuestion,
-    hasNotBuzzedYet: ({ context, event }) => !context.public.buzzerQueue.includes(event.caller.id),
-    hasReachedQuestionLimit: ({ context }, { questionNumber }: { questionNumber: number }) => 
-      questionNumber > context.public.settings.questionCount,
+    isHost: ({ context, event }: { context: GameServerContext; event: GameEvent }) => 
+      event.caller.id === context.public.hostId,
+    canJoin: ({ context }: { context: GameServerContext }) => 
+      context.public.players.length < context.public.settings.maxPlayers,
+    isPlayerTurn: ({ context, event }: { context: GameServerContext; event: GameEvent }) => 
+      event.caller.id === context.public.currentTurn,
+    canBuy: ({ context, event }: { context: GameServerContext; event: GameEvent }) => {
+      const player = context.public.players.find((p: { id: string }) => p.id === event.caller.id);
+      return player ? player.buyCount < 3 : false;
+    },
+    hasValidPlay: ({ context, event }: { context: GameServerContext; event: GameEvent }) => {
+      // TODO: Implement validation for runs and sets
+      return true;
+    },
   },
   actors: {
     generateGameCode: fromPromise(async () => {
@@ -27,113 +43,50 @@ export const gameMachine = setup({
     }),
   },
   actions: {
-    updateGameStatus: assign(({ context }, { status }: { status: "lobby" | "active" | "finished" }) => ({
+    updateGamePhase: assign(({ context }, { phase }: { phase: GamePhase }) => ({
       public: produce(context.public, draft => {
-        draft.gameStatus = status;
+        draft.gamePhase = phase;
       })
     })),
-    setQuestionNumber: assign(({ context }, { number }: { number: number }) => ({
+    addPlayerToGame: assign(({ context }, { id, name }: { id: string; name: string }) => ({
       public: produce(context.public, draft => {
-        draft.questionNumber = number;
-      })
-    })),
-    addPlayerToGame: assign(({ context }, { name, id }: { name: string; id: string }) => ({
-      public: produce(context.public, draft => {
-        draft.players.push({ id, name, score: 0 });
-      })
-    })),
-    setQuestion: assign(({ context }, { question }: { question: string }) => ({
-      public: produce(context.public, draft => {
-        draft.currentQuestion = {
-          text: question,
-        };
-        draft.buzzerQueue = [];
-        draft.lastAnswerResult = null;
-        draft.previousAnswers = [];
-      })
-    })),
-    addToBuzzerQueue: assign(({ context, event }: { context: GameServerContext; event: GameEvent }) => ({
-      public: produce(context.public, draft => {
-        draft.buzzerQueue.push(event.caller.id);
-      })
-    })),
-    validateAnswer: assign(({ context }, { playerId, correct }: { playerId: string; correct: boolean }) => ({
-      public: produce(context.public, draft => {
-        const player = draft.players.find(p => p.id === playerId);
-        if (player) {
-          if (correct) {
-            player.score += 1;
-            draft.questionNumber += 1;
-            draft.currentQuestion = null;
-            draft.buzzerQueue = [];
-          } else {
-            draft.buzzerQueue = draft.buzzerQueue.slice(1);
-            draft.previousAnswers = draft.previousAnswers || [];
-            draft.previousAnswers.push({
-              playerId: player.id,
-              playerName: player.name,
-              correct: false,
-            });
-          }
-
-          draft.lastAnswerResult = {
-            playerId: player.id,
-            playerName: player.name,
-            correct,
-          };
-
-          if (draft.questionNumber > draft.settings.questionCount) {
-            draft.gameStatus = "finished";
-            draft.winner = draft.players.reduce((a, b) => 
-              a.score > b.score ? a : b
-            ).id;
-          }
-        }
-      })
-    })),
-    setWinner: assign(({ context }) => ({
-      public: produce(context.public, draft => {
-        draft.winner = draft.players.reduce((a, b) => 
-          a.score > b.score ? a : b
-        ).id;
-      })
-    })),
-    setGameCode: assign(({ context }, { code }: { code: string }) => ({
-      public: produce(context.public, draft => {
-        draft.gameCode = code;
-      })
-    })),
-    assignGeneratedGameCode: assign(({ context }, { gameCode }: { gameCode: string }) => ({
-      public: produce(context.public, draft => {
-        draft.gameCode = gameCode;
-      })
-    })),
-    skipQuestion: assign(({ context }) => ({
-      public: produce(context.public, draft => {
-        draft.currentQuestion = null;
-        draft.buzzerQueue = [];
-        draft.questionNumber += 1;
-
-        if (draft.questionNumber > draft.settings.questionCount) {
-          draft.gameStatus = "finished";
-          draft.winner = draft.players.reduce((a, b) => 
-            a.score > b.score ? a : b
-          ).id;
-        }
+        draft.players.push({ 
+          id, 
+          name, 
+          score: 0,
+          hand: [],
+          isDown: false,
+          buyCount: 0,
+          runs: [],
+          sets: [],
+        });
       })
     })),
     removePlayer: assign(({ context }, { playerId }: { playerId: string }) => ({
       public: produce(context.public, draft => {
         draft.players = draft.players.filter(p => p.id !== playerId);
-        draft.buzzerQueue = draft.buzzerQueue.filter(id => id !== playerId);
-        if (draft.previousAnswers) {
-          draft.previousAnswers = draft.previousAnswers.filter(a => a.playerId !== playerId);
-        }
+      })
+    })),
+    initializeRound: assign(({ context }) => ({
+      public: produce(context.public, draft => {
+        draft.currentRound = 1;
+        draft.roundRequirements = ROUND_REQUIREMENTS[0];
+        draft.currentTurn = draft.players[0]?.id ?? null;
+        draft.turnPhase = "draw";
+        draft.players.forEach(player => {
+          player.isDown = false;
+          player.buyCount = 0;
+        });
+      })
+    })),
+    assignGameCode: assign(({ context }, { gameCode }: { gameCode: string }) => ({
+      public: produce(context.public, draft => {
+        draft.gameCode = gameCode;
       })
     })),
   },
 }).createMachine({
-  id: "triviaGame",
+  id: "runSetJimmy",
   context: ({ input }: { input: GameInput }) => ({
     public: {
       id: input.id,
@@ -141,15 +94,19 @@ export const gameMachine = setup({
       hostName: input.hostName,
       gameCode: undefined,
       players: [],
-      currentQuestion: null,
-      buzzerQueue: [],
-      gameStatus: "lobby" as const,
+      gamePhase: "lobby" as GamePhase,
+      currentRound: 0,
+      roundRequirements: ROUND_REQUIREMENTS[0],
+      currentTurn: null,
+      turnPhase: null,
+      discardPile: [] as PlayableCard[],
+      visiblePlays: [],
       winner: null,
       settings: {
         maxPlayers: 7,
-        questionCount: 40,
       },
-      questionNumber: 0,
+      actionHistory: [],
+      scores: {},
     },
     private: {},
   }),
@@ -160,11 +117,12 @@ export const gameMachine = setup({
       states: {
         generatingCode: {
           invoke: {
+            id: 'generateGameCode',
             src: 'generateGameCode',
             onDone: {
               target: 'ready',
               actions: {
-                type: 'assignGeneratedGameCode',
+                type: 'assignGameCode',
                 params: ({ event }: { event: DoneActorEvent<string> }) => ({
                   gameCode: event.output,
                 }),
@@ -175,6 +133,7 @@ export const gameMachine = setup({
         ready: {
           on: {
             JOIN_GAME: {
+              guard: 'canJoin',
               actions: {
                 type: 'addPlayerToGame',
                 params: ({ event }: { event: Extract<GameEvent, { type: 'JOIN_GAME' }> }) => ({
@@ -184,15 +143,15 @@ export const gameMachine = setup({
               },
             },
             START_GAME: {
-              guard: "isHost",
-              target: "#triviaGame.active",
+              guard: 'isHost',
+              target: '#runSetJimmy.dealing',
               actions: [
-                { type: 'updateGameStatus', params: { status: "active" } },
-                { type: 'setQuestionNumber', params: { number: 1 } },
+                { type: 'updateGamePhase', params: { phase: "dealing" as GamePhase } },
+                'initializeRound',
               ],
             },
             REMOVE_PLAYER: {
-              guard: "isHost",
+              guard: 'isHost',
               actions: {
                 type: 'removePlayer',
                 params: ({ event }: { event: Extract<GameEvent, { type: 'REMOVE_PLAYER' }> }) => ({
@@ -204,83 +163,19 @@ export const gameMachine = setup({
         },
       },
     },
-    active: {
-      initial: "questionPrep",
-      states: {
-        questionPrep: {},
-        questionActive: {},
-        answerValidation: {},
-      },
-      on: {
-        JOIN_GAME: {
-          actions: {
-            type: 'addPlayerToGame',
-            params: ({ event }: { event: Extract<GameEvent, { type: 'JOIN_GAME' }> }) => ({
-              id: event.caller.id,
-              name: event.playerName,
-            }),
-          },
-        },
-        SUBMIT_QUESTION: {
-          guard: "isHost",
-          target: ".questionActive",
-          actions: {
-            type: 'setQuestion',
-            params: ({ event }: { event: Extract<GameEvent, { type: 'SUBMIT_QUESTION' }> }) => ({
-              question: event.question,
-            }),
-          },
-        },
-        BUZZ_IN: {
-          guard: and(["canBuzzIn", "hasNotBuzzedYet"]),
-          target: ".answerValidation",
-          actions: "addToBuzzerQueue",
-        },
-        VALIDATE_ANSWER: {
-          guard: "isHost",
-          target: ".questionPrep",
-          actions: {
-            type: 'validateAnswer',
-            params: ({ event }: { event: Extract<GameEvent, { type: 'VALIDATE_ANSWER' }> }) => ({
-              playerId: event.playerId,
-              correct: event.correct,
-            }),
-          },
-        },
-        END_GAME: {
-          guard: "isHost",
-          target: "finished",
-          actions: [
-            { type: 'updateGameStatus', params: { status: "finished" } },
-            'setWinner',
-          ],
-        },
-        SKIP_QUESTION: {
-          guard: "isHost",
-          target: ".questionPrep",
-          actions: "skipQuestion",
-        },
-        REMOVE_PLAYER: {
-          guard: "isHost",
-          actions: {
-            type: 'removePlayer',
-            params: ({ event }: { event: Extract<GameEvent, { type: 'REMOVE_PLAYER' }> }) => ({
-              playerId: event.playerId,
-            }),
-          },
-        },
-      },
+    dealing: {
+      // Add dealing state implementation
+    },
+    playing: {
+      // Add playing state implementation
+    },
+    roundEnd: {
+      // Add round end state implementation
     },
     finished: {
       type: "final",
     },
   },
 }) satisfies ActorKitStateMachine<GameEvent, GameInput, GameServerContext>;
-
-interface Player {
-  id: string;
-  name: string;
-  score: number;
-}
 
 export type GameMachine = typeof gameMachine;

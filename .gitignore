@@ -22,3 +22,5 @@ recordings
 certs
 *.pem
 test-results
+.bug-bash/
+.e2e/

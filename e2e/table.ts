@@ -42,6 +42,8 @@ export type PlayOptions = {
   onMoment?: (name: string, view: PhoneView) => void | Promise<void>;
   /** Give up if nothing changes for this long. */
   stallMs?: number;
+  /** Before dealing, wait until this many seats are taken (a person joining a bot table). */
+  waitForSeats?: number;
 };
 
 /** Plays the room with the bots until the game ends (or `rounds` rounds are scored). */
@@ -54,6 +56,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
   let lastLogSeq = 0;
   const host = phones[0];
   if (!host) throw new Error("no phones");
+  if (opts.waitForSeats) await host.getByTestId("lobby-seat").nth(opts.waitForSeats - 1).waitFor({ timeout: 0 });
   await host.getByRole("button", { name: /^Deal round 1/ }).click();
   for (;;) {
     const views = await Promise.all(phones.map(readView));

@@ -212,7 +212,7 @@ describe("the cut and the deal", () => {
     for (const card of view(room, ANN).player?.hand ?? []) expect(json).not.toContain(`"${card.id}"`);
     expect(pub(room).seats.map((s) => s.cards).every((n) => n >= 10)).toBe(true);
     expect(pub(room).round).toBe(1);
-    expect(pub(room).requirement).toEqual({ runs: 1, sets: 1, text: "1 run and 1 set" });
+    expect(pub(room).requirement).toEqual({ runs: 1, sets: 1, text: "1 run and 1 set", name: "One run, one set" });
     expect(pub(room).turn).toBe(1);
   });
 });

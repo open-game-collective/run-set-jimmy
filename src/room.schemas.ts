@@ -85,7 +85,7 @@ export const RoomPublicContextSchema = z.object({
   hostSeat: z.number().nullable(),
   canStart: z.boolean(),
   round: z.number(),
-  requirement: z.object({ runs: z.number(), sets: z.number(), text: z.string() }).nullable(),
+  requirement: z.object({ runs: z.number(), sets: z.number(), text: z.string(), name: z.string() }).nullable(),
   dealer: z.number().nullable(),
   cutter: z.number().nullable(),
   cut: z.object({ seat: z.number(), card: CardSchema, kept: z.boolean(), seq: z.number() }).nullable(),

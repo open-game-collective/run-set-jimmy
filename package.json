@@ -7,10 +7,11 @@
     "dev": "wrangler dev --ip 0.0.0.0 --port 8797",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/client && tsc --noEmit -p e2e",
-    "test:seam": "vitest run --config vitest.seam.config.ts",
+    "test:seam": "GAME_URL=${GAME_URL:-http://localhost:8798} vitest run --config vitest.seam.config.ts",
     "test:mutate": "stryker run",
     "deploy": "wrangler deploy",
-    "record": "tsx e2e/record-game.ts"
+    "record": "tsx e2e/record-game.ts",
+    "dev:seam": "wrangler dev --port 8798 --var OGS_JWKS_URL:http://localhost:8831/.well-known/jwks.json"
   },
   "dependencies": {
     "@open-game-system/cast-kit-core": "file:vendor/open-game-system-cast-kit-core-0.2.0.tgz",
@@ -22,6 +23,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "xstate": "^5.33.2",
+    "xstate-migrate": "^0.0.8",
     "zod": "^3.25.76"
   },
   "devDependencies": {

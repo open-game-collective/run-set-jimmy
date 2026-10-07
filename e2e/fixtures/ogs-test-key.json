@@ -1,0 +1,10 @@
+{
+  "kid": "rocket-crew-seam-1",
+  "privateJwk": {
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "uUcvOmRJjvn44KDYyIpWxMc6Qh6jik8EIHuiIiNwQHs",
+    "y": "GFhcJC00kp9dfVqejXO-fWYOJ0RRy65gH2vPWnmYXJ4",
+    "d": "-xxCFU5IJGo--VIlsS1r_rCMzd8dqGfwXITKKRePLhY"
+  }
+}

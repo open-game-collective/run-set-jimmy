@@ -1,5 +1,5 @@
 import { standings, winners } from "./game/game";
-import { describeRequirement, requestBuy, requirementFor, type RoundState } from "./game/round";
+import { ROUND_NAMES, describeRequirement, requestBuy, requirementFor, type RoundState } from "./game/round";
 import type { PlayerView, RoomPrivateContext, RoomPublicContext, RoomServerContext, RoomServerOnlyContext } from "./room.types";
 
 /**
@@ -100,7 +100,7 @@ export function publicView(server: RoomServerOnlyContext, base: Pick<RoomPublicC
     hostSeat: server.seats.length > 0 ? 0 : null,
     canStart: server.seats.length >= 2,
     round: server.roundNumber,
-    requirement: req ? { ...req, text: describeRequirement(req) } : null,
+    requirement: req ? { ...req, text: describeRequirement(req), name: ROUND_NAMES[server.roundNumber - 1] ?? "" } : null,
     dealer: server.roundNumber > 0 ? (server.roundNumber - 1) % Math.max(1, server.seats.length) : null,
     cutter: server.cutter,
     cut: server.cut,

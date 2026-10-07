@@ -15,6 +15,8 @@ export const REQUIREMENTS: readonly Requirement[] = [
   { runs: 3, sets: 0 },
 ];
 export const ROUNDS = REQUIREMENTS.length;
+/** What people at the table call each round (RULES.md "Rounds"). */
+export const ROUND_NAMES = ["One run, one set", "Two sets", "Two runs", "Two sets, one run", "Two runs, one set", "Three sets", "Three runs"] as const;
 export const HAND_SIZE = 11;
 export const MAX_BUYS = 3;
 

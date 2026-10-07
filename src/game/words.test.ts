@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardName, rankName, suitSymbol } from "./words";
+import { cardName, rankName, rankPlural, suitSymbol } from "./words";
 
 describe("words", () => {
   it("names cards the way people say them", () => {
@@ -12,5 +12,9 @@ describe("words", () => {
   it("ranks and suits", () => {
     expect([1, 10, 11, 13, 14].map(rankName)).toEqual(["A", "10", "J", "K", "A"]);
     expect(suitSymbol("C")).toBe("♣");
+  });
+
+  it("plural ranks", () => {
+    expect([1, 8, 11, 12, 13].map(rankPlural)).toEqual(["Aces", "8s", "Jacks", "Queens", "Kings"]);
   });
 });

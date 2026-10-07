@@ -512,3 +512,35 @@ describe("scoreRound", () => {
     expect(scoreRound(s)).toEqual({ a: 0, b: 85, c: 10 });
   });
 });
+
+describe("goDown arranges runs", () => {
+  it("accepts a run's cards in any order, jokers filling the gaps", () => {
+    const run = [c(8), J(), c(5), c(7)];
+    const set = [c(9, "S"), c(9, "D"), c(9, "C")];
+    const s0 = rig({ hands: [[...run, ...set, c(2, "S"), c(3, "S")], filler(11)], phase: { kind: "play" } });
+    const s = ok(
+      goDown(s0, "a", [
+        { kind: "run", cardIds: ids(run) },
+        { kind: "set", cardIds: ids(set) },
+      ]),
+    );
+    const meld = s.melds[0]?.meld;
+    expect(meld?.kind === "run" && meld.low).toBe(5);
+    expect(meld?.cards.map((x) => (x.kind === "joker" ? "J" : x.rank))).toEqual([5, "J", 7, 8]);
+  });
+
+  it("keeps an order that already reads as a run, and honours the spare-joker end", () => {
+    const set = () => [c(9, "S"), c(9, "D"), c(9, "C")];
+    const low = [J(), c(5), c(6), c(7)];
+    const st = set();
+    const s0 = rig({ hands: [[...low, ...st, c(2, "S"), c(3, "S")], filler(11)], phase: { kind: "play" } });
+    const s = ok(goDown(s0, "a", [{ kind: "run", cardIds: ids(low) }, { kind: "set", cardIds: ids(st) }]));
+    expect(s.melds[0]?.meld.kind === "run" && s.melds[0].meld.low).toBe(4);
+
+    const loose = [c(6), J(), c(5), c(7)].reverse();
+    const st2 = set();
+    const s1 = rig({ hands: [[...loose, ...st2, c(2, "S"), c(3, "S")], filler(11)], phase: { kind: "play" } });
+    const t = ok(goDown(s1, "a", [{ kind: "run", cardIds: ids(loose), spare: "low" }, { kind: "set", cardIds: ids(st2) }]));
+    expect(t.melds[0]?.meld.kind === "run" && t.melds[0].meld.low).toBe(4);
+  });
+});

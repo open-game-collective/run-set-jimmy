@@ -1,3 +1,4 @@
+import { arrangeRun, placementsFor } from "./arrange";
 import { buildShoe, handPoints, mulberry32, shuffle, type Card, type Rng } from "./cards";
 import { playOnRun, playOnSet, readRun, readSet, type Meld, type RunMeld, type RunPlacement } from "./melds";
 
@@ -53,7 +54,8 @@ export type RoundState = {
 };
 
 export type Result = { ok: true; state: RoundState } | { ok: false; reason: string };
-export type MeldProposal = { kind: "run" | "set"; cardIds: string[] };
+/** A run's cards may come in any order; `spare` says which end its spare jokers go on. */
+export type MeldProposal = { kind: "run" | "set"; cardIds: string[]; spare?: "high" | "low" };
 
 const fail = (reason: string): Result => ({ ok: false, reason });
 const done = (state: RoundState): Result => ({ ok: true, state });
@@ -214,11 +216,7 @@ export function answerOffer(s: RoundState, seatId: string, answer: "take" | "let
 export function canPlayAnywhere(card: Card, melds: readonly TableMeld[]): boolean {
   return melds.some(({ meld }) => {
     if (meld.kind === "set") return playOnSet(meld, card).ok;
-    const tries: RunPlacement[] = [{ at: "low" }, { at: "high" }];
-    meld.cards.forEach((x, i) => {
-      if (x.kind === "joker") tries.push({ replace: i, jokerTo: "low" }, { replace: i, jokerTo: "high" });
-    });
-    return tries.some((p) => playOnRun(meld, card, p).ok);
+    return placementsFor(meld, card).length > 0;
   });
 }
 
@@ -240,6 +238,10 @@ function playCheck(s: RoundState, seatId: string): string | null {
   return null;
 }
 
+/** Keeps an order that already reads as a run; otherwise arranges the cards (jokers fill the gaps). */
+const asRun = (cards: Card[], spare: "high" | "low" = "high"): Card[] =>
+  readRun(cards).ok ? cards : (arrangeRun(cards, spare) ?? cards);
+
 export function goDown(s: RoundState, seatId: string, proposals: readonly MeldProposal[]): Result {
   const bad = playCheck(s, seatId);
   if (bad) return fail(bad);
@@ -260,7 +262,7 @@ export function goDown(s: RoundState, seatId: string, proposals: readonly MeldPr
   const melds: TableMeld[] = [];
   for (const [i, p] of proposals.entries()) {
     const cards = p.cardIds.map((id) => byId.get(id) as Card);
-    const read = p.kind === "run" ? readRun(cards) : readSet(cards);
+    const read = p.kind === "run" ? readRun(asRun(cards, p.spare)) : readSet(cards);
     if (!read.ok) return fail(read.reason);
     melds.push({ id: `m${s.nextMeldId + i}`, owner: seatId, meld: read.meld });
   }

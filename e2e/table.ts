@@ -86,7 +86,8 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
       if (opts.rounds !== undefined && v0.pub.scores.length >= opts.rounds) return { rounds: v0.pub.scores.length, actions };
       await wait(beat * 6);
       await host.getByRole("button", { name: /^Deal round/ }).click();
-      await waitForChange(phones, views);
+      // Wait for the host's own view to leave the scores, so a stale view can't deal twice.
+      for (let t = 0; t < 100 && stateName((await readView(host))?.value ?? "roundOver") === "roundOver"; t++) await wait(60);
       continue;
     }
     if (state === "cutting") {

@@ -2,11 +2,13 @@ import { isOGSCastAvailable } from "@open-game-system/cast-kit-core";
 import { getOgsSessionSource, onOgsPause } from "@open-game-system/profile-kit";
 import { createRoot } from "react-dom/client";
 import { mount } from "./boot";
+import { setUpApp } from "./install";
 import { joinedRoomUrl } from "./ogs-claim";
 import { StartChooser } from "./screens/StartChooser";
 import { TvScreen } from "./screens/TvScreen";
 import { captureStream, resumeOnGesture, setSoundPaused, startSound } from "./sound";
 
+setUpApp();
 // Listen for the OGS launcher from the first moment (it posts ogs:start as soon as the frame loads).
 getOgsSessionSource();
 // The launcher parks this TV page (Home, or another game) without unloading it: go silent.

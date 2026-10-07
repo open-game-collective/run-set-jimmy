@@ -1,11 +1,22 @@
 import { useState } from "react";
+import { InstallOffer } from "../install";
+import { lastTable } from "../pwa";
+
+const storage = () => {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+};
 
 /**
- * A phone that opened the start page in a plain browser: host a game from here (the TV page opens
- * on a laptop or TV browser), or join one with its code.
+ * Start screen (the installed app's home, and a phone that opened the start page): host a game,
+ * join one with its code, go back to the table this phone sat at, or use this screen as the TV.
  */
 export function StartChooser() {
   const [code, setCode] = useState("");
+  const back = lastTable(storage(), Date.now());
   return (
     <div className="phone chooser">
       <h1 className="wordmark">
@@ -13,7 +24,12 @@ export function StartChooser() {
         <span className="amp">Set</span>
         <span>Jimmy</span>
       </h1>
-      <a className="btn primary" href="/host">
+      {back ? (
+        <a className="btn primary" href={back.url}>
+          Back to table {back.code}
+        </a>
+      ) : null}
+      <a className={`btn ${back ? "" : "primary"}`} href="/host">
         Host a game
       </a>
       <form
@@ -27,6 +43,10 @@ export function StartChooser() {
         <input id="code" value={code} onChange={(e) => setCode(e.target.value)} maxLength={4} autoCapitalize="characters" placeholder="ABCD" />
         <button className="btn">Join</button>
       </form>
+      <a className="btn ghost" href="/?as=tv">
+        Use this screen as the TV
+      </a>
+      <InstallOffer compact />
     </div>
   );
 }

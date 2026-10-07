@@ -115,7 +115,8 @@ export default {
     // OGS: the app opens the start page with ?ogsRoom= to follow the TV into its room.
     const joining = hostTarget(url).join;
     if (url.pathname === "/" && joining) return Response.redirect(new URL(`/host?ogsRoom=${joining}`, url).toString(), 302);
-    if (url.pathname === "/") return Response.redirect(new URL(`/tv/${newRoomCode()}`, url).toString(), 302);
+    // A plain browser gets a new room's TV page; ?as=tv keeps a phone or tablet on it (the start screen's "Use this screen as the TV").
+    if (url.pathname === "/") return Response.redirect(new URL(`/tv/${newRoomCode()}${url.searchParams.get("as") === "tv" ? "?as=tv" : ""}`, url).toString(), 302);
     if (head === "api") return actorKitRouter(req, env, ctx);
     if (url.pathname === "/host") return hostRoom(req, env);
     if (url.pathname === "/ws-probe") return wsProbe(req);

@@ -1,0 +1,17 @@
+{
+  "name": "Run Set Jimmy",
+  "short_name": "Run Set Jimmy",
+  "description": "Seven rounds of runs and sets. The TV shows the table; your phone holds your hand.",
+  "start_url": "/start?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a2725",
+  "theme_color": "#0c2e2b",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

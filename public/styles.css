@@ -410,6 +410,11 @@ button { font: inherit; color: inherit; }
 .req-big { font-family: var(--display); font-size: 34px; margin: 0; line-height: 1.05; }
 
 .chooser, .name-step { gap: 22px; }
+.chooser { justify-content: center; align-items: stretch; max-width: 420px; margin: 0 auto; }
+.chooser .wordmark { justify-content: center; margin-bottom: 10px; }
+.chooser .join-form { max-width: none; }
+.install-hint { margin: 0; font-size: 14px; color: var(--muted); text-align: center; }
+.offline .req-big { margin-top: 10px; }
 .join-form { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 340px; }
 .join-form label { font-size: 15px; color: var(--muted); }
 .join-form input {

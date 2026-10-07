@@ -4,6 +4,7 @@ import { RoomContext } from "../../room.context";
 import { useClaim, useOgsSitting } from "../ogs";
 import { startSound } from "../sound";
 import { useStayConnected } from "../wake";
+import { rememberTable } from "../pwa";
 import { OwnTvPage, type Hosting } from "./HostPanel";
 import { PhoneCut } from "./PhoneCut";
 import { PhoneLobby } from "./PhoneLobby";
@@ -117,6 +118,18 @@ function useExposeView(): void {
   }, [pub, me, value]);
 }
 
+/** Remembers this phone's seat, so the installed app's start screen can bring it back. */
+function useRememberSeat(seated: boolean): void {
+  useEffect(() => {
+    if (!seated) return;
+    try {
+      rememberTable(localStorage, location.href, Date.now());
+    } catch {
+      // No storage (private mode): nothing to remember.
+    }
+  }, [seated]);
+}
+
 /** A phone at the table: joins, then shows whatever the room is doing. */
 export function PhoneScreen() {
   const role = RoomContext.useSelector((s) => s.private.role);
@@ -126,6 +139,7 @@ export function PhoneScreen() {
   useStayConnected();
   useOgsSitting(true);
   useExposeView();
+  useRememberSeat(role === "player");
 
   useEffect(() => {
     const unlock = () => startSound();

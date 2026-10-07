@@ -13,3 +13,6 @@ npm-debug.log*
 *storybook.log
 storybook-static/
 .DS_Store
+coverage/
+reports/
+.stryker-tmp/

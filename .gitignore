@@ -24,3 +24,4 @@ certs
 test-results
 .bug-bash/
 .e2e/
+.claude/worktrees/

@@ -39,7 +39,9 @@ export function PhoneScores({ final }: { final: boolean }) {
             {final ? "New game" : `Deal round ${pub.round + 1}`}
           </button>
         ) : (
-          <p className="muted center-text">{pub.seats[0]?.name ?? "The host"} deals next.</p>
+          <p className="muted center-text">
+            {pub.seats[0]?.name ?? "The host"} {final ? "can start a new game." : "deals next."}
+          </p>
         )}
       </footer>
     </div>

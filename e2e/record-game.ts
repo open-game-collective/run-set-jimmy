@@ -125,7 +125,7 @@ function stitch({ videos, startedAt, audio, audioStartedAt }: Meta): void {
       ...main3.flatMap((i) => ["-ss", offsets[i] ?? "0", "-i", videos[i] ?? ""]),
       "-itsoffset", audioOffset, "-i", audio,
       "-filter_complex",
-      `${label(0, "TV", 720)};${label(1, `${NAMES[0]} · host`, 720)};${label(2, `${NAMES[1]}`, 720)};[p0][p1][p2]hstack=inputs=3:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[out]`,
+      `${label(0, "TV", 720)};${label(1, `${NAMES[0]} (host)`, 720)};${label(2, `${NAMES[1]}`, 720)};[p0][p1][p2]hstack=inputs=3:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[out]`,
       "-map", "[out]", "-map", "3:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "21", "-r", "30", "-c:a", "aac", "-b:a", "160k", "-shortest", OUT,
     ],
     { stdio: "inherit" },

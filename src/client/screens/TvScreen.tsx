@@ -1,6 +1,6 @@
 import { useOgsSession } from "@open-game-system/profile-kit/react";
 import qrcode from "qrcode-generator";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ROUNDS } from "../../game/round";
 import { cardName } from "../../game/words";
 import { RoomContext } from "../../room.context";
@@ -52,7 +52,7 @@ export function TvScreen({ joinUrl }: { joinUrl: string }) {
 
   return (
     <div className="tv-viewport">
-      <div className="stage" style={{ transform: `scale(${scale})` }} data-phase={phase} data-round={pub.round}>
+      <div className="stage" style={{ "--scale": scale } as CSSProperties} data-phase={phase} data-round={pub.round}>
         <div className="lamp" aria-hidden />
         {phase === "lobby" ? (
           <Lobby pub={pub} joinUrl={joinUrl} />

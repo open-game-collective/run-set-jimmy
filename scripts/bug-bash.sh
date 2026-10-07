@@ -11,7 +11,7 @@ JOIN=$(grep '^JOIN ' "$OUT/bot-table.log" | head -1 | cut -d' ' -f2)
 if [ -z "$JOIN" ]; then echo "$ID: bot table never came up" | tee "$OUT/error.txt"; kill $BOTS; exit 2; fi
 echo "$ID: exploring $JOIN"
 APP_URL="$JOIN" pnpm exec e2e explore --target "$TARGET" --agent "$AGENT" --max-steps 12 --timeout 900000 \
-  --reporter json,markdown --output "$OUT" --video "$GOAL" > "$OUT/explore.log" 2>&1
+  --reporter json,markdown --output "$OUT" --video on "$GOAL" > "$OUT/explore.log" 2>&1
 CODE=$?
 echo "$ID: explore exit $CODE"
 kill $BOTS 2>/dev/null; wait $BOTS 2>/dev/null

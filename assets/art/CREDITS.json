@@ -1,0 +1,13 @@
+[
+  {
+    "files": [
+      "assets/art/hero-clean-src.png"
+    ],
+    "source": "Codex image_generation (gpt-image, ChatGPT plan) (generated)",
+    "input": {
+      "prompt": "Wide 16:9 composition. Painterly mid-century illustration, 1962 supper-club card room: deep teal-green felt card table under a warm low brass lamp, brass trim, cream playing cards with oxblood red and ink black suits, art-deco oxblood-and-brass card backs. Rich, warm, cinematic lighting, subtle film grain. No people, no faces anywhere (no face cards with portraits: court cards show only a large ornate letter), no text, no logos, no UI. On the table: two fanned hands of cards, a neat run of hearts laid out face up, a set of three eights, a joker card shown as a brass starburst, a draw pile and a discard pile, scattered brass poker chips, a crystal tumbler. Leave calm empty felt in the upper-left third for a title to be drawn over later.",
+      "references": []
+    },
+    "date": "2026-10-07"
+  }
+]

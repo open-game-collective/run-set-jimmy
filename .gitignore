@@ -16,3 +16,9 @@ storybook-static/
 coverage/
 reports/
 .stryker-tmp/
+public/js
+recordings
+.playwright-cli
+certs
+*.pem
+test-results

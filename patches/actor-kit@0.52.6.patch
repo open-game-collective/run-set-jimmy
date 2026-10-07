@@ -1,0 +1,48 @@
+diff --git a/dist/worker.mjs b/dist/worker.mjs
+index 9698245d7f125f233f277677167169ac2f7c8b38..faa2c3892b45972aeb20ef335c5448544ec1e1c2 100644
+--- a/dist/worker.mjs
++++ b/dist/worker.mjs
+@@ -360,7 +360,6 @@ const createMachineServer = ({ machine, schemas, options }) => class MachineServ
+ 	}
+ 	async webSocketError(_ws, _error) {}
+ 	async webSocketClose(ws, code, _reason, _wasClean) {
+-		ws.close(code, "Durable Object is closing WebSocket");
+ 		const subscription = this.subscriptions.get(ws);
+ 		if (subscription) {
+ 			subscription.unsubscribe();
+@@ -368,6 +367,9 @@ const createMachineServer = ({ machine, schemas, options }) => class MachineServ
+ 		}
+ 		this.attachments.delete(ws);
+ 		this.#sendQueues.delete(ws);
++		// 1005/1006/1015 are reserved (they describe a close; they can't be sent): reply with a normal close.
++		const sendable = code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000;
++		try { ws.close(sendable, "Durable Object is closing WebSocket"); } catch {}
+ 	}
+ 	send(event) {
+ 		assert(this.actor, "Actor is not running");
+diff --git a/src/createMachineServer.ts b/src/createMachineServer.ts
+index a67b8028ff9b8ed2df142fb7fcc08596445e1cb8..d455c81af559e50cadad5316d8daceb2dd83ab9d 100644
+--- a/src/createMachineServer.ts
++++ b/src/createMachineServer.ts
+@@ -467,7 +467,6 @@ export const createMachineServer = <
+       _reason: string,
+       _wasClean: boolean
+     ) {
+-      ws.close(code, "Durable Object is closing WebSocket");
+       const subscription = this.subscriptions.get(ws);
+       if (subscription) {
+         subscription.unsubscribe();
+@@ -475,6 +474,13 @@ export const createMachineServer = <
+       }
+       this.attachments.delete(ws);
+       this.#sendQueues.delete(ws);
++      // 1005/1006/1015 are reserved (they describe a close; they can't be sent): reply with a normal close.
++      const sendable = code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000;
++      try {
++        ws.close(sendable, "Durable Object is closing WebSocket");
++      } catch {
++        // Already closed.
++      }
+     }
+ 
+     send(event: ClientEventFrom<TMachine> | ServiceEventFrom<TMachine>) {

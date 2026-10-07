@@ -1,0 +1,24 @@
+name = "run-set-jimmy"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+
+[build]
+command = "pnpm build:client"
+watch_dir = "src" # worker + client: any source change rebuilds and reloads
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[vars]
+# Keys that sign OGS game tokens. Local tests point it at their own key set:
+# --var OGS_JWKS_URL:http://localhost:8831/.well-known/jwks.json
+OGS_JWKS_URL = "https://opengame-api.jonathanrmumm.workers.dev/.well-known/jwks.json"

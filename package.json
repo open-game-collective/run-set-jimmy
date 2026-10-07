@@ -3,18 +3,48 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:client": "esbuild src/client/tv.tsx src/client/join.tsx --bundle --format=esm --target=es2020,safari15 --jsx=automatic --minify --sourcemap --outdir=public/js",
+    "dev": "wrangler dev --ip 0.0.0.0 --port 8797",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "test:mutate": "stryker run"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/client && tsc --noEmit -p e2e",
+    "test:seam": "vitest run --config vitest.seam.config.ts",
+    "test:mutate": "stryker run",
+    "deploy": "wrangler deploy",
+    "record": "tsx e2e/record-game.ts"
   },
   "dependencies": {
+    "@open-game-system/cast-kit-core": "file:vendor/open-game-system-cast-kit-core-0.2.0.tgz",
+    "@open-game-system/cast-kit-react": "file:vendor/open-game-system-cast-kit-react-0.2.0.tgz",
+    "@open-game-system/profile-kit": "file:vendor/open-game-system-profile-kit-0.1.0.tgz",
+    "actor-kit": "0.52.6",
+    "immer": "^11.1.21",
+    "qrcode-generator": "^2.0.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "xstate": "^5.33.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261007.1",
     "@stryker-mutator/core": "^10.0.0",
     "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.148.0",
+    "ws": "^8.22.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@open-game-system/cast-kit-core": "file:./vendor/open-game-system-cast-kit-core-0.2.0.tgz"
+    },
+    "patchedDependencies": {
+      "actor-kit@0.52.6": "patches/actor-kit@0.52.6.patch"
+    }
   }
 }

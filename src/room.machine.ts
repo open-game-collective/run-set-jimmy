@@ -1,5 +1,5 @@
 import { produce, type Draft } from "immer";
-import { assign, not, setup } from "xstate";
+import { and, assign, not, setup } from "xstate";
 import { decksFor, mulberry32, type Card } from "./game/cards";
 import { addRound, dealerFor, newScoreSheet } from "./game/game";
 import {
@@ -201,6 +201,7 @@ function dealRound(context: RoomServerContext, at: number): RoomServerContext {
   return update(context, (d) => {
     d.server.round = r as Draft<RoundState>;
     d.server.cutter = null;
+    d.server.cutEndsAt = null;
     d.server.oops = {};
     const cut = r.cut;
     if (cut) {
@@ -305,7 +306,16 @@ export const roomMachine = setup({
       return p?.kind === "draw" && p.window === "open";
     },
     roundOut: ({ context }) => context.server.round?.phase.kind === "out",
+    /** actor-kit's own RESUME after it restores the room (a system caller). */
+    restored: ({ event }) => event.type === "RESUME" && "caller" in event && event.caller.type === "system",
+    windowExpired: ({ context }) => context.server.windowEndsAt !== null && Date.now() >= context.server.windowEndsAt,
+    cutExpired: ({ context }) => context.server.cutEndsAt !== null && Date.now() >= context.server.cutEndsAt,
     lastRound: ({ context }) => context.server.roundNumber >= ROUNDS,
+  },
+  delays: {
+    // The time left, not a fresh full wait: a restored room keeps its deadlines (timers don't survive).
+    buyWindow: ({ context }) => Math.max(0, (context.server.windowEndsAt ?? 0) - Date.now()),
+    cutTimeout: ({ context }) => Math.max(0, (context.server.cutEndsAt ?? 0) - Date.now()),
   },
   actions: {
     join: assign(({ context, event }) => join(context, event)),
@@ -337,6 +347,7 @@ export const roomMachine = setup({
       const dealer = dealerFor(context.server.roundNumber, n);
       return update(context, (d) => {
         d.server.cutter = (dealer - 1 + n) % n;
+        d.server.cutEndsAt = context.server.cutEndsAt ?? Date.now() + CUT_TIMEOUT_MS;
       });
     }),
     cutHere: assign(({ context, event }) => (event.type === "CUT" ? dealRound(context, event.at) : context)),
@@ -344,8 +355,15 @@ export const roomMachine = setup({
     act: assign(({ context, event }) => act(context, event)),
     stampWindow: assign(({ context }) =>
       update(context, (d) => {
-        d.server.windowEndsAt = Date.now() + BUY_WINDOW_MS;
+        d.server.windowEndsAt = context.server.windowEndsAt ?? Date.now() + BUY_WINDOW_MS;
       }),
+    ),
+    clearWindowStamp: assign(({ context }) =>
+      context.server.windowEndsAt === null
+        ? context
+        : update(context, (d) => {
+            d.server.windowEndsAt = null;
+          }),
     ),
     closeWindow: assign(({ context }) => {
       const r = context.server.round;
@@ -381,6 +399,7 @@ export const roomMachine = setup({
         requirement: null,
         dealer: null,
         cutter: null,
+        cutEndsAt: null,
         cut: null,
         turn: null,
         turnPhase: null,
@@ -410,6 +429,7 @@ export const roomMachine = setup({
         roundNumber: 0,
         gameNumber: 0,
         windowEndsAt: null,
+        cutEndsAt: null,
         oops: {},
         log: [],
         seq: 0,
@@ -433,8 +453,15 @@ export const roomMachine = setup({
     },
     cutting: {
       entry: "setCutter",
-      on: { CUT: { guard: "fromCutter", target: "playing", actions: "cutHere" } },
-      after: { [CUT_TIMEOUT_MS]: { target: "playing", actions: "cutForThem" } },
+      on: {
+        CUT: { guard: "fromCutter", target: "playing", actions: "cutHere" },
+        TICK: { guard: "cutExpired", target: "playing", actions: "cutForThem" },
+        RESUME: [
+          { guard: and(["restored", "cutExpired"]), target: "playing", actions: "cutForThem" },
+          { guard: "restored", target: "cutting", reenter: true },
+        ],
+      },
+      after: { cutTimeout: { target: "playing", actions: "cutForThem" } },
     },
     playing: {
       initial: "window",
@@ -451,9 +478,17 @@ export const roomMachine = setup({
         window: {
           entry: "stampWindow",
           always: { guard: not("windowOpen"), target: "acting" },
-          after: { [BUY_WINDOW_MS]: { target: "acting", actions: "closeWindow" } },
+          on: {
+            TICK: { guard: "windowExpired", target: "acting", actions: "closeWindow" },
+            RESUME: [
+              { guard: and(["restored", "windowExpired"]), target: "acting", actions: "closeWindow" },
+              { guard: "restored", target: "window", reenter: true },
+            ],
+          },
+          after: { buyWindow: { target: "acting", actions: "closeWindow" } },
         },
         acting: {
+          entry: "clearWindowStamp",
           always: { guard: "windowOpen", target: "window" },
         },
       },

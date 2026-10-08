@@ -7,6 +7,7 @@ import { RoomContext } from "../../room.context";
 import type { RoomPublicContext } from "../../room.types";
 import { CardBack, MeldCards, PlayingCard, meldTitle } from "../cards";
 import { useOgsSitting, useOgsTv } from "../ogs";
+import { useDeadlineNudge } from "../useDeadlineNudge";
 import { soundForLog, sounds } from "../sound";
 import { Seats } from "./Seats";
 
@@ -43,6 +44,7 @@ const STATE_LABELS = { lobby: "lobby", cutting: "cutting", roundOver: "roundOver
 
 export function TvScreen({ joinUrl }: { joinUrl: string }) {
   useOgsTv();
+  useDeadlineNudge();
   useOgsSitting(false);
   const scale = useStageScale();
   const pub = RoomContext.useSelector((s) => s.public);

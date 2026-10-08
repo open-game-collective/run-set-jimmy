@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BUY_WINDOW_MS, CUT_TIMEOUT_MS } from "./room.machine";
 import {
   ANN,
@@ -11,6 +11,7 @@ import {
   cut,
   joinPlayers,
   playOutRound,
+  restartRoom,
   pub,
   round,
   send,
@@ -357,5 +358,62 @@ describe("rounds and the game", () => {
     expect(pub(room).seats).toHaveLength(4);
     expect(turnId(room)).toBe(BEN);
     expect(round(room).seats).toHaveLength(4);
+  });
+});
+
+describe("a room that restarts or sleeps keeps going (Durable Object eviction loses timers)", () => {
+  afterEach(() => vi.restoreAllMocks());
+  const later = (ms: number) => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + ms);
+  };
+
+  it("restarted after the buy window's time is up: closes it at once", () => {
+    const room = startedRoom();
+    later(BUY_WINDOW_MS + 100);
+    const back = restartRoom(room);
+    expect(value(back)).toBe("playing.acting");
+    expect(pub(back).window).toBeNull();
+  });
+
+  it("restarted during the window: keeps its deadline and closes when the time left runs out", () => {
+    const room = startedRoom();
+    const endsAt = pub(room).window?.endsAt;
+    const back = restartRoom(room);
+    expect(value(back)).toBe("playing.window");
+    expect(pub(back).window?.endsAt).toBe(endsAt);
+    back.clock.increment(BUY_WINDOW_MS);
+    expect(value(back)).toBe("playing.acting");
+  });
+
+  it("asleep with no timer: a phone's TICK after the deadline closes the window; before it, nothing", () => {
+    const room = startedRoom();
+    const asleep = restartRoom(room, { resume: false });
+    send(asleep, CAT, { type: "TICK" });
+    expect(value(asleep)).toBe("playing.window");
+    later(BUY_WINDOW_MS + 100);
+    send(asleep, CAT, { type: "TICK" });
+    expect(value(asleep)).toBe("playing.acting");
+  });
+
+  it("the cut: a restart re-arms its timeout, and a TICK after it cuts for the cutter", () => {
+    const room = createTestActor();
+    joinPlayers(room);
+    send(room, ANN, { type: "START" });
+    expect(pub(room).cutEndsAt).toBeGreaterThan(Date.now());
+    const back = restartRoom(room);
+    expect(value(back)).toBe("cutting");
+    back.clock.increment(CUT_TIMEOUT_MS);
+    expect(value(back)).toBe("playing.window");
+
+    const room2 = createTestActor();
+    joinPlayers(room2);
+    send(room2, ANN, { type: "START" });
+    const asleep = restartRoom(room2, { resume: false });
+    send(asleep, BEN, { type: "TICK" });
+    expect(value(asleep)).toBe("cutting");
+    later(CUT_TIMEOUT_MS + 100);
+    send(asleep, BEN, { type: "TICK" });
+    expect(value(asleep)).toBe("playing.window");
   });
 });

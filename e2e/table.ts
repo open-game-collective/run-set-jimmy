@@ -2,6 +2,7 @@
  * A table of real browser pages: one TV and N phones, every phone played by the bot through the
  * real buttons. Used by the recorder, the playtest seam test and the bug bash.
  */
+import { mkdir, writeFile } from "node:fs/promises";
 import type { Browser, BrowserContextOptions, Page } from "playwright";
 import { devices } from "playwright";
 import { decide, perform, progress, readView, stateName, type PhoneView } from "./phone-bot";
@@ -70,12 +71,18 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
     } else if (Date.now() - lastChange > stallMs) {
       throw new Error(`stalled in ${state}: ${fingerprint}`);
     }
+    let hooked = false;
     for (const e of v0.pub.log) {
       if (e.seq > lastLogSeq) {
         lastLogSeq = e.seq;
-        if (["down", "out", "joker", "bought"].includes(e.kind)) await opts.onMoment?.(e.kind, v0);
+        if (["down", "out", "joker", "bought"].includes(e.kind)) {
+          await opts.onMoment?.(e.kind, v0);
+          hooked = true;
+        }
       }
     }
+    // A moment hook takes time (screenshots, a reload): decide from fresh views, not these.
+    if (hooked && stateName(v0.value).startsWith("playing")) continue;
 
     if (state === "gameOver") {
       await opts.onMoment?.("gameOver", v0);
@@ -135,12 +142,19 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
       if (turnView.pub.turnPhase === "play") await opts.onMoment?.("turn-play", turnView);
       if (action) {
         await wait(beat);
-        await perform(turnPage, turnView, action, beat).catch((e: unknown) => {
+        await perform(turnPage, turnView, action, beat).catch(async (e: unknown) => {
+          // Evidence: every phone's screen and own view at the moment a move failed.
+          await mkdir("recordings/fail", { recursive: true });
+          for (const [i, p] of phones.entries()) {
+            await p.screenshot({ path: `recordings/fail/phone${i}.png` }).catch(() => undefined);
+            await writeFile(`recordings/fail/phone${i}.json`, JSON.stringify(await readView(p), null, 1)).catch(() => undefined);
+          }
           throw new Error(`${NAMES[turnIndex]} couldn't ${action.type} (${JSON.stringify(action).slice(0, 160)}): ${String(e).split("\n")[0]}`);
         });
         actions++;
         acted = true;
-        await waitForChange(phones, views);
+        // Wait for the acting phone's own screen to show its move (production is slower than localhost).
+        await waitForChange([turnPage], [turnView]);
       }
     }
     if (!acted) await wait(120);

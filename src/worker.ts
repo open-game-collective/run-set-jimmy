@@ -7,6 +7,7 @@ import { actorKitRouter, type WorkerEnv } from "./room.server";
 import type { Boot } from "./room.types";
 
 export { Room } from "./room.server";
+export { Game, Remix, Session } from "./legacy-objects";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 const ROOM_CODE = /^[A-Z]{4}$/;

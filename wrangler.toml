@@ -14,8 +14,13 @@ binding = "ASSETS"
 name = "ROOM"
 class_name = "Room"
 
+# v1 was the 2024 Remix prototype's (its classes stay as placeholders: src/legacy-objects.ts).
 [[migrations]]
 tag = "v1"
+new_sqlite_classes = ["Remix", "Session", "Game"]
+
+[[migrations]]
+tag = "v2"
 new_sqlite_classes = ["Room"]
 
 [vars]

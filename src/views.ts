@@ -170,6 +170,7 @@ export function publicView(server: RoomServerOnlyContext, base: Pick<RoomPublicC
     requirement: requirementView(server.roundNumber),
     dealer: dealerView(server),
     cutter: server.cutter,
+    cutEndsAt: server.cutEndsAt,
     cut: server.cut,
     turn: null,
     turnPhase: null,

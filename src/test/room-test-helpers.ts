@@ -120,3 +120,18 @@ export function playOutRound(room: TestRoom): void {
   for (let i = 0; i < 20_000 && value(room).startsWith("playing"); i++) botStep(room);
   if (value(room).startsWith("playing")) throw new Error("round never ended");
 }
+
+/**
+ * What actor-kit does when a Durable Object restarts mid-game (a deploy, an eviction): persist the
+ * snapshot, build a fresh actor from it (pending timers are NOT restored) and send RESUME. With
+ * `resume: false`, the room stays asleep: no RESUME until something wakes it.
+ */
+export function restartRoom(room: TestRoom, opts: { resume?: boolean } = {}): TestRoom {
+  const persisted = room.actor.getPersistedSnapshot();
+  room.actor.stop();
+  const clock = new SimulatedClock();
+  const actor = createActor(roomMachine, { clock, snapshot: persisted, input: inputFor(TV) });
+  actor.start();
+  if (opts.resume !== false) actor.send({ type: "RESUME", caller: { type: "system", id: "ABCD" }, env: TEST_ENV, storage: TEST_STORAGE } as RoomEvent);
+  return { actor, clock };
+}

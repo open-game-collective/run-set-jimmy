@@ -52,6 +52,8 @@ export type RoomServerOnlyContext = {
   roundNumber: number;
   gameNumber: number;
   windowEndsAt: number | null;
+  /** When the room cuts for a cutter who hasn't (ms since epoch), while cutting. */
+  cutEndsAt: number | null;
   oops: Record<string, { line: string; seq: number }>;
   log: LogEntry[];
   seq: number;

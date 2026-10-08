@@ -36,6 +36,8 @@ export const RoomClientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("PLAY_ON"), cardId: CardId, meldId: z.string().min(1).max(8), placement: PlacementSchema.optional() }),
   z.object({ type: z.literal("DISCARD"), cardId: CardId }),
   z.object({ type: z.literal("NEXT_ROUND") }),
+  // Any screen, once a deadline (buy window, cut) has passed: wakes a room whose timer was lost.
+  z.object({ type: z.literal("TICK") }),
   z.object({ type: z.literal("NEW_GAME") }),
   // A TV parked by the OGS launcher (Home) or back (Continue): its household is away meanwhile.
   z.object({ type: z.literal("AWAY"), away: z.boolean() }),
@@ -88,6 +90,8 @@ export const RoomPublicContextSchema = z.object({
   requirement: z.object({ runs: z.number(), sets: z.number(), text: z.string(), name: z.string() }).nullable(),
   dealer: z.number().nullable(),
   cutter: z.number().nullable(),
+  /** While cutting: when the room cuts for the cutter (ms since epoch). */
+  cutEndsAt: z.number().nullable(),
   cut: z.object({ seat: z.number(), card: CardSchema, kept: z.boolean(), seq: z.number() }).nullable(),
   turn: z.number().nullable(),
   turnPhase: z.enum(["draw", "offer", "play", "out"]).nullable(),

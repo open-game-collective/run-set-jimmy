@@ -5,6 +5,7 @@ import { useClaim, useOgsSitting } from "../ogs";
 import { startSound } from "../sound";
 import { useStayConnected } from "../wake";
 import { rememberTable } from "../pwa";
+import { useDeadlineNudge } from "../useDeadlineNudge";
 import { OwnTvPage, type Hosting } from "./HostPanel";
 import { PhoneCut } from "./PhoneCut";
 import { PhoneLobby } from "./PhoneLobby";
@@ -139,6 +140,7 @@ export function PhoneScreen() {
   useStayConnected();
   useOgsSitting(true);
   useExposeView();
+  useDeadlineNudge();
   useRememberSeat(role === "player");
 
   useEffect(() => {

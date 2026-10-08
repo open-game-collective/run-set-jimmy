@@ -67,9 +67,24 @@ const tap = async (page: Page, selector: string) => {
   await page.locator(selector).first().click({ timeout: 8000 });
 };
 
+/** Closes a go-down builder or placement sheet left open (as a player would tap Cancel). */
+async function closeLeftovers(page: Page): Promise<void> {
+  for (const scope of ['[data-testid="builder"]', '[role="dialog"]']) {
+    const cancel = page.locator(scope).getByRole("button", { name: "Cancel" });
+    if (await cancel.isVisible().catch(() => false)) await cancel.click();
+  }
+}
+
+/** Selects a hand card unless it already is (a second tap would deselect it). */
+async function select(page: Page, cardId: string): Promise<void> {
+  const card = page.locator(`[data-hand-card="${cardId}"]`).first();
+  if (!(await card.evaluate((el) => el.classList.contains("selected")).catch(() => false))) await card.click({ timeout: 8000 });
+}
+
 /** Does the action through the phone's buttons. */
 export async function perform(page: Page, view: PhoneView, action: BotAction | { type: "buy" }, beat: number): Promise<void> {
   const pause = (ms = beat) => page.waitForTimeout(ms);
+  if (action.type === "goDown" || action.type === "playOn" || action.type === "discard") await closeLeftovers(page);
   switch (action.type) {
     case "buy":
       return page.getByRole("button", { name: /^Buy the/ }).click({ timeout: 4000 });
@@ -92,7 +107,7 @@ export async function perform(page: Page, view: PhoneView, action: BotAction | {
       return page.getByRole("button", { name: "Lay down" }).click();
     }
     case "playOn": {
-      await tap(page, `[data-hand-card="${action.cardId}"]`);
+      await select(page, action.cardId);
       await pause(beat / 2);
       await tap(page, `button[data-meld="${action.meldId}"]`);
       const sheet = page.getByRole("dialog");
@@ -106,7 +121,7 @@ export async function perform(page: Page, view: PhoneView, action: BotAction | {
       return;
     }
     case "discard": {
-      await tap(page, `[data-hand-card="${action.cardId}"]`);
+      await select(page, action.cardId);
       await pause(beat / 2);
       return page.getByRole("button", { name: /^Discard the/ }).click();
     }

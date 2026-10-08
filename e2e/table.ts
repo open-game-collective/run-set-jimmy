@@ -143,12 +143,17 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
       if (action) {
         await wait(beat);
         await perform(turnPage, turnView, action, beat).catch(async (e: unknown) => {
+          // The click may have landed just as the screen re-rendered (Playwright then retries a
+          // detached button): if the phone's state moved on, the move went through.
+          await wait(1500);
+          if (progress(await readView(turnPage)) !== progress(turnView)) return;
           // Evidence: every phone's screen and own view at the moment a move failed.
           await mkdir("recordings/fail", { recursive: true });
           for (const [i, p] of phones.entries()) {
             await p.screenshot({ path: `recordings/fail/phone${i}.png` }).catch(() => undefined);
             await writeFile(`recordings/fail/phone${i}.json`, JSON.stringify(await readView(p), null, 1)).catch(() => undefined);
           }
+          await writeFile("recordings/fail/error.txt", String(e instanceof Error ? (e.stack ?? e.message) : e)).catch(() => undefined);
           throw new Error(`${NAMES[turnIndex]} couldn't ${action.type} (${JSON.stringify(action).slice(0, 160)}): ${String(e).split("\n")[0]}`);
         });
         actions++;

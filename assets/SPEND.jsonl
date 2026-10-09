@@ -1,3 +1,5 @@
 {"date":"2026-10-07T18:20:31.819Z","project":"run-set-jimmy","service":"codex","unit":"codex_images","amount":1,"estimated":false,"label":"codex image_generation","files":["assets/art/hero-clean-src.png"],"usd":0}
 {"date":"2026-10-07T18:22:42.278Z","project":"run-set-jimmy","service":"codex","unit":"codex_images","amount":1,"estimated":false,"label":"codex image_generation","files":["assets/art/icon-src.png"],"usd":0}
 {"date":"2026-10-07T18:23:25.692Z","project":"run-set-jimmy","service":"codex","unit":"codex_images","amount":1,"estimated":false,"label":"codex image_generation","files":["assets/art/cover-src.png"],"usd":0}
+{"date":"2026-10-09T03:39:10.689Z","project":"run-set-jimmy","service":"elevenlabs","unit":"elevenlabs_credits","amount":567,"estimated":true,"label":"music assets/audio/theme-src.mp3","files":["assets/audio/theme-src.mp3"],"source":"estimate"}
+{"date":"2026-10-09T03:41:23.726Z","project":"run-set-jimmy","service":"codex","unit":"codex_images","amount":1,"estimated":false,"label":"codex image_generation","files":["assets/art/logo-emblem-src.png"],"usd":0}

@@ -31,5 +31,16 @@
       "references": []
     },
     "date": "2026-10-07"
+  },
+  {
+    "files": [
+      "assets/art/logo-emblem-src.png"
+    ],
+    "source": "Codex image_generation (gpt-image, ChatGPT plan) (generated)",
+    "input": {
+      "prompt": "A game logo emblem on a fully transparent background: a tight fan of five cream playing cards seen straight on, from left a heart, a spade, a diamond, a club and in front a joker shown only as a brass eight-pointed starburst, fanned upward like a crown, with a polished brass rim light and a soft drop shadow. Painterly mid-century 1962 supper-club style, oxblood red and ink black suits. No text, no letters, no numbers, no faces, no background, isolated object with transparent background.",
+      "references": []
+    },
+    "date": "2026-10-09"
   }
 ]

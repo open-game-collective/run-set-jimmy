@@ -25,15 +25,27 @@ async function render(html: string, size: { width: number; height: number }, pat
   await page.close();
 }
 
-// Logo: the wordmark alone, on transparency.
-await render(`<div style="width:1200px;height:300px;display:grid;place-items:center">${wordmark(150, "0 6px 24px rgba(0,0,0,.45)")}</div>`, { width: 1200, height: 300 }, `${OUT}/logo.png`, true);
+/** The wordmark with a brass edge and depth, like a sign: cream face, stepped brass shadow, soft drop. */
+const extruded = (size: number) => {
+  const steps = Array.from({ length: 7 }, (_, i) => `0 ${i + 1}px 0 ${i < 3 ? "#b08a3a" : "#7a5a20"}`).join(",");
+  return wordmark(size, `${steps}, 0 10px 22px rgba(0,0,0,.55), 0 0 2px #ecd08a`);
+};
+/** Logo: the painted card fan (Codex, transparent) crowning the extruded wordmark. */
+const logo = (width: number) => `
+  <div style="position:relative;width:${width}px;display:grid;justify-items:center">
+    <img src="${dataUrl("assets/art/logo-emblem-src.png")}" style="width:${width * 0.62}px;margin-bottom:-${width * 0.1}px">
+    <div style="position:relative">${extruded(width * 0.125)}</div>
+  </div>`;
+
+// Logo: transparent, the emblem and the wordmark only.
+await render(`<div style="width:1200px;height:760px;display:grid;place-items:center">${logo(1080)}</div>`, { width: 1200, height: 760 }, `${OUT}/logo.png`, true);
 
 // Cover (2:3, with the title): the cover painting, the wordmark lettered over its calm top third.
 await render(
   `<div style="position:relative;width:600px;height:900px;background:url(${dataUrl("assets/art/cover-src.png")}) center/cover">
-     <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,26,24,.82),rgba(6,26,24,.35) 38%,transparent 55%)"></div>
-     <div style="position:absolute;left:0;right:0;top:70px;display:grid;justify-items:center;gap:14px;text-align:center">
-       ${wordmark(84, "0 4px 18px rgba(0,0,0,.6)")}
+     <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,26,24,.88),rgba(6,26,24,.55) 42%,transparent 62%)"></div>
+     <div style="position:absolute;left:0;right:0;top:36px;display:grid;justify-items:center;gap:6px;text-align:center">
+       ${logo(520)}
        <p style="margin:0;font-family:Fraunces;font-style:italic;font-weight:600;font-size:28px;color:#ecd08a">Seven rounds of runs and sets</p>
      </div>
    </div>`,
@@ -46,4 +58,5 @@ await browser.close();
 execFileSync("sips", ["-z", "512", "512", "assets/art/icon-src.png", "--out", `${OUT}/icon.png`], { stdio: "ignore" });
 execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", "assets/art/hero-clean-src.png", "-vf", "scale=1920:1080:flags=lanczos", "-q:v", "3", `${OUT}/hero-clean.jpg`]);
 copyFileSync("assets/art/tv-tile-src.jpg", `${OUT}/tv.jpg`);
+// The launcher's Home theme: mastered from the ElevenLabs loop by scripts/theme.sh.
 console.log(`art kit in ${OUT}`);

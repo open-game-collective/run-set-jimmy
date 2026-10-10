@@ -8,6 +8,7 @@
  *   GAME_URL=http://localhost:8797 pnpm record     (needs `pnpm dev`)
  *   GAME_ROUNDS=2   stop after 2 rounds (default: all 7)
  *   GAME_BEAT=400   ms between taps (slower is easier to follow)
+ *   GAME_PHONES=1 GAME_AI=2   one phone, and the host adds two AI players (files: run-set-jimmy-ai-*.mp4)
  *
  * Playwright records pixels only, so the TV page's Web Audio is captured with a MediaRecorder
  * (?record exposes a tap) and muxed in.
@@ -19,9 +20,12 @@ import { BASE, NAMES, newRoomCode, phoneContext, playTable, seatPlayers, wait } 
 
 const RAW = "recordings/raw";
 const MOMENTS = "recordings/moments";
-const OUT = "recordings/run-set-jimmy-game.mp4";
-const PHONES_OUT = "recordings/run-set-jimmy-phones.mp4";
-const FAST_OUT = "recordings/run-set-jimmy-fast.mp4";
+const PHONE_COUNT = Number(process.env.GAME_PHONES ?? 4);
+const AI_COUNT = Number(process.env.GAME_AI ?? 0);
+const PREFIX = AI_COUNT > 0 ? "recordings/run-set-jimmy-ai" : "recordings/run-set-jimmy";
+const OUT = `${PREFIX}-game.mp4`;
+const PHONES_OUT = `${PREFIX}-phones.mp4`;
+const FAST_OUT = `${PREFIX}-fast.mp4`;
 const ROUNDS = process.env.GAME_ROUNDS ? Number(process.env.GAME_ROUNDS) : undefined;
 const BEAT = Number(process.env.GAME_BEAT ?? 350);
 const FONT = "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf";
@@ -37,7 +41,7 @@ async function main() {
   const startedAt = [Date.now()];
   const tv = await tvCtx.newPage();
   const phones: Page[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < PHONE_COUNT; i++) {
     const opts = phoneContext();
     const ctx = await browser.newContext({ ...opts, recordVideo: { dir: RAW, size: opts.viewport } });
     startedAt.push(Date.now());
@@ -61,6 +65,10 @@ async function main() {
   const audioStartedAt = Date.now();
   await wait(1500);
   await seatPlayers(phones, code, BEAT * 2);
+  for (let i = 0; i < AI_COUNT; i++) {
+    await phones[0]?.getByTestId("add-ai").first().click();
+    await wait(BEAT * 2);
+  }
   await wait(BEAT * 4);
 
   const seen = new Map<string, number>();
@@ -116,8 +124,9 @@ function stitch({ videos, startedAt, audio, audioStartedAt }: Meta): void {
   const label = (i: number, text: string, h: number) =>
     `[${i}:v]scale=-2:${h},pad=iw+24:ih+64:12:64:color=0x0a2725,drawtext=fontfile='${FONT}':text='${text}':fontcolor=0xecd08a:fontsize=26:x=(w-tw)/2:y=18[p${i}]`;
 
-  // TV | Jonathan | Juniper, with the TV's sound.
-  const main3 = [0, 1, 2];
+  // TV | Jonathan | Juniper (as many phones as there are, up to two), with the TV's sound.
+  const main3 = [0, 1, 2].slice(0, Math.min(3, videos.length));
+  const labels = ["TV", `${NAMES[0]} (host)`, `${NAMES[1]}`];
   execFileSync(
     "ffmpeg",
     [
@@ -125,22 +134,22 @@ function stitch({ videos, startedAt, audio, audioStartedAt }: Meta): void {
       ...main3.flatMap((i) => ["-ss", offsets[i] ?? "0", "-i", videos[i] ?? ""]),
       "-itsoffset", audioOffset, "-i", audio,
       "-filter_complex",
-      `${label(0, "TV", 720)};${label(1, `${NAMES[0]} (host)`, 720)};${label(2, `${NAMES[1]}`, 720)};[p0][p1][p2]hstack=inputs=3:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[out]`,
-      "-map", "[out]", "-map", "3:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "21", "-r", "30", "-c:a", "aac", "-b:a", "160k", "-shortest", OUT,
+      `${main3.map((i) => label(i, labels[i] ?? "", 720)).join(";")};${main3.map((i) => `[p${i}]`).join("")}hstack=inputs=${main3.length}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[out]`,
+      "-map", "[out]", "-map", `${main3.length}:a`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "21", "-r", "30", "-c:a", "aac", "-b:a", "160k", "-shortest", OUT,
     ],
     { stdio: "inherit" },
   );
-  // All four phones.
-  const ph = [1, 2, 3, 4];
-  execFileSync(
+  // Every phone side by side (when there's more than one).
+  const ph = videos.slice(1).map((_, k) => k + 1);
+  if (ph.length > 1) execFileSync(
     "ffmpeg",
     [
       "-y", "-loglevel", "error",
       ...ph.flatMap((i) => ["-ss", offsets[i] ?? "0", "-i", videos[i] ?? ""]),
       "-itsoffset", audioOffset, "-i", audio,
       "-filter_complex",
-      `${ph.map((i, k) => label(k, NAMES[i - 1] ?? "", 844)).join(";")};[p0][p1][p2][p3]hstack=inputs=4:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[out]`,
-      "-map", "[out]", "-map", "4:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23", "-r", "30", "-c:a", "aac", "-b:a", "128k", "-shortest", PHONES_OUT,
+      `${ph.map((i, k) => label(k, NAMES[i - 1] ?? "", 844)).join(";")};${ph.map((_, k) => `[p${k}]`).join("")}hstack=inputs=${ph.length}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[out]`,
+      "-map", "[out]", "-map", `${ph.length}:a`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23", "-r", "30", "-c:a", "aac", "-b:a", "128k", "-shortest", PHONES_OUT,
     ],
     { stdio: "inherit" },
   );

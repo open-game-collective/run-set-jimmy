@@ -6,7 +6,7 @@
  *     declares the room's TV page, reports the sitting, follows the TV into its room;
  *   - several couches in one room (multiCouch): households on the TV.
  *
- * Run against `pnpm dev:seam` (OGS_JWKS_URL points at the test key set served on 8831).
+ * Run against `pnpm dev:seam` (OGS_JWKS_URL points at the test key set served on 8837).
  */
 import { chromium, type Browser, type Frame, type Page } from "playwright";
 import { afterAll, describe, expect, it } from "vitest";

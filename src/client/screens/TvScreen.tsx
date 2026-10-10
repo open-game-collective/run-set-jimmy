@@ -125,7 +125,7 @@ function Lobby({ pub, joinUrl }: { pub: Pub; joinUrl: string }) {
           ? "Waiting for players…"
           : pub.canStart
             ? `${host?.name ?? "The host"} deals when everyone's in.`
-            : "One more player to start."}
+            : `${pub.seats.length} of 3 players: join on your phone, or ${host?.name ?? "the host"} adds an AI player.`}
       </p>
     </div>
   );

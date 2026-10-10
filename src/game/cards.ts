@@ -6,15 +6,15 @@ export type Natural = { id: string; kind: "card"; suit: Suit; rank: number };
 export type Joker = { id: string; kind: "joker" };
 export type Card = Natural | Joker;
 
-export const MIN_PLAYERS = 2;
+export const MIN_PLAYERS = 3;
 export const MAX_PLAYERS = 7;
 
 const isPlayerCount = (players: number) => Number.isInteger(players) && players >= MIN_PLAYERS && players <= MAX_PLAYERS;
 
-/** 2 decks for 2–3 players, 3 decks for 4–7. */
+/** 2 decks for 3 players, 3 decks for 4–7. */
 export function decksFor(players: number): number {
   if (!isPlayerCount(players)) {
-    throw new Error(`Run Set Jimmy is for 2–7 players, got ${players}`);
+    throw new Error(`Run Set Jimmy is for 3–7 players, got ${players}`);
   }
   return players <= 3 ? 2 : 3;
 }

@@ -11,7 +11,6 @@ const joker: Card = { id: "t-J", kind: "joker" };
 
 describe("decksFor", () => {
   it.each([
-    [2, 2],
     [3, 2],
     [4, 3],
     [7, 3],
@@ -19,8 +18,8 @@ describe("decksFor", () => {
     expect(decksFor(players)).toBe(decks);
   });
 
-  it.each([1, 8])("rejects %i players", (players) => {
-    expect(() => decksFor(players)).toThrow(/2–7 players/);
+  it.each([1, 2, 8])("rejects %i players", (players) => {
+    expect(() => decksFor(players)).toThrow(/3–7 players/);
   });
 });
 
@@ -43,7 +42,7 @@ describe("buildShoe", () => {
   });
 
   it("has each suit and rank once per deck", () => {
-    const shoe = buildShoe(2);
+    const shoe = buildShoe(3);
     const sevensOfHearts = shoe.filter((c) => c.kind === "card" && c.suit === "H" && c.rank === 7);
     expect(sevensOfHearts).toHaveLength(2);
     const ranks = new Set(shoe.flatMap((c) => (c.kind === "card" ? [c.rank] : [])));
@@ -75,7 +74,7 @@ describe("cardPoints", () => {
 
 describe("shuffle", () => {
   it("is a permutation and does not mutate its input", () => {
-    const shoe = buildShoe(2);
+    const shoe = buildShoe(3);
     const before = shoe.map((c) => c.id);
     const out = shuffle(shoe, mulberry32(42));
     expect(shoe.map((c) => c.id)).toEqual(before);
@@ -84,7 +83,7 @@ describe("shuffle", () => {
   });
 
   it("is deterministic for a seed and differs between seeds", () => {
-    const shoe = buildShoe(2);
+    const shoe = buildShoe(3);
     const a = shuffle(shoe, mulberry32(7)).map((c) => c.id);
     expect(shuffle(shoe, mulberry32(7)).map((c) => c.id)).toEqual(a);
     expect(shuffle(shoe, mulberry32(8)).map((c) => c.id)).not.toEqual(a);

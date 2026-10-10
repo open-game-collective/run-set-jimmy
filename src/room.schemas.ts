@@ -18,6 +18,8 @@ export const RoomClientEventSchema = z.discriminatedUnion("type", [
   // Lobby: take a seat (plain browser: typed name; OGS: the verified profile name wins).
   z.object({ type: z.literal("JOIN"), name: z.string().trim().max(16).optional() }),
   z.object({ type: z.literal("START") }),
+  // Host, lobby: put an AI player in the next open seat.
+  z.object({ type: z.literal("ADD_AI") }),
   // Host: put a seat elsewhere in the turn order (match the couch), or take it away (lobby only).
   z.object({ type: z.literal("MOVE_SEAT"), seat: z.number().int().min(0).max(6), to: z.number().int().min(0).max(6) }),
   z.object({ type: z.literal("REMOVE_SEAT"), seat: z.number().int().min(0).max(6) }),
@@ -75,6 +77,8 @@ export const SeatViewSchema = z.object({
   buys: z.number(),
   /** The household's label (OGS multiCouch), null with one household. */
   couch: z.string().nullable(),
+  /** An AI player the room plays itself. */
+  ai: z.boolean(),
 });
 
 const LogSchema = z.object({ seq: z.number(), seat: z.number().nullable(), text: z.string(), kind: z.string() });
@@ -92,6 +96,8 @@ export const RoomPublicContextSchema = z.object({
   cutter: z.number().nullable(),
   /** While cutting: when the room cuts for the cutter (ms since epoch). */
   cutEndsAt: z.number().nullable(),
+  /** When an AI player acts next (ms since epoch), so screens can wake a sleeping room. */
+  aiActAt: z.number().nullable(),
   cut: z.object({ seat: z.number(), card: CardSchema, kept: z.boolean(), seq: z.number() }).nullable(),
   turn: z.number().nullable(),
   turnPhase: z.enum(["draw", "offer", "play", "out"]).nullable(),

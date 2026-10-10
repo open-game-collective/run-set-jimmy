@@ -3,7 +3,7 @@
 Rules: [RULES.md](../RULES.md) (the source of truth for play).
 
 ## Who and where
-- **Audience:** extended family and friends: grown-ups, 2–7 players, mixed card-game experience.
+- **Audience:** extended family and friends: grown-ups, 3–7 seats (people or AI players), mixed card-game experience.
   OGS catalogue: grown-ups only (`ADULT_GAMES`), every role `audience: "grownup"`.
 - **Devices:** the TV shows the table; every player holds their hand on a phone (OGS app WebView or a
   plain browser). No kid or iPad seat.

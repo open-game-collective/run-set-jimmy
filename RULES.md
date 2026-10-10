@@ -2,6 +2,7 @@
 A strategic card game of runs and sets, also known as "One Run One Set".
 
 **Audience:** extended family and friends: adults with mixed card-game experience.
+**Players:** 3–7 seats, people or AI players (the host fills open seats with AI players in the lobby).
 **Devices:** TV + phones through OGS (`/cast-party-game`). The TV shows the table (melds, discard
 pile, buy window, scores); each phone holds one player's private hand.
 
@@ -12,7 +13,7 @@ out. Everyone else scores the cards left in their hand. Lowest total after round
 ## Components
 | Players | Decks | Jokers | Cards |
 |---------|-------|--------|-------|
-| 2–3     | 2     | 4      | 108   |
+| 3       | 2     | 4      | 108   |
 | 4–7     | 3     | 6      | 162   |
 
 Two jokers per deck in play. Duplicate cards (e.g. two 7♥) are normal.
@@ -51,6 +52,14 @@ Two jokers per deck in play. Duplicate cards (e.g. two 7♥) are normal.
 
 Every game plays all 7 rounds. 11 cards are dealt every round. (Round 7 is possible without buys:
 draw to 12, go down with three 4-card runs, out.)
+
+## AI players
+- The host can put an AI player in any open seat before the game: Vera, Sal, Dot, Monty, Lou and
+  Bea, the supper-club regulars. They count toward the 3-player minimum, so one person with two AI
+  players is a game.
+- They follow every rule here, buy discards they want, cut the deck when it's theirs to cut, and
+  take a short pause before each move so the table can follow them on the TV.
+- The host is always a person.
 
 ## Deal
 1. The **dealer** marker rotates one seat left each round. The player left of the dealer goes first.
@@ -119,5 +128,5 @@ win.**
 - You may only play cards during your own turn (buying is the only out-of-turn action).
 - Players who are already down may still buy.
 - You may discard a card that would fit a meld on the table.
-- 2–7 players, all human: no bots in the POC, and no turn timer.
+- 3–7 seats; people have no turn timer (AI players pause briefly before each move).
 - A disconnected player rejoins the same seat with the same hand.

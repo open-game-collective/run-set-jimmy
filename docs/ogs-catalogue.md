@@ -28,7 +28,7 @@ after a deploy to `https://run-set-jimmy.jonathanrmumm.workers.dev/`
       tile: "/art/run-set-jimmy/tv.jpg",
       hero: "/art/run-set-jimmy/tv.jpg",
     },
-    shop: { ages: "10+", minutes: [45, 90], players: "2-7" },
+    shop: { ages: "10+", minutes: [45, 90], players: "3-7" },
   },
 ```
 

@@ -333,6 +333,9 @@ button { font: inherit; color: inherit; }
 .seat.turn { border-color: var(--brass-hi); box-shadow: 0 0 30px rgba(236, 208, 138, 0.35); transform: translateY(-6px); }
 .seat.out { border-color: var(--brass-hi); background: rgba(201, 162, 74, 0.25); }
 .seat.away { opacity: 0.55; }
+.seat.open { border-style: dashed; background: transparent; justify-content: center; opacity: 0.5; }
+.seat.open .seat-name { font-size: 22px; color: var(--muted); }
+.ai-tag { margin-left: 8px; font-size: 0.55em; vertical-align: middle; padding: 1px 7px; border-radius: 999px; border: 1.5px solid var(--brass); color: var(--brass-hi); font-weight: 700; letter-spacing: 0.06em; }
 .seat-disc {
   position: relative;
   width: 74px;
@@ -428,7 +431,19 @@ button { font: inherit; color: inherit; }
   text-align: center;
 }
 
-/* Lobby */
+/* Lobby: a seven-slot list, like a game lobby */
+.slots-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 6px; }
+.player-count { font-family: var(--display); font-weight: 700; font-size: 18px; color: var(--brass-hi); }
+.slot-row.ai .seat-label small:first-of-type { color: var(--brass-hi); }
+.slot-row.open { border-style: dashed; background: rgba(6, 26, 24, 0.3); color: var(--muted); padding: 0; }
+.slot-row.open .seat-no { opacity: 0.6; }
+.slot-row.open .open-label { padding: 10px 0; }
+.open-slot { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 12px; border: 0; background: transparent; text-align: left; font-size: 16px; font-weight: 600; color: var(--cream-text); }
+.open-slot small { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--brass); }
+.lobby .slots { gap: 6px; }
+/* The Deal button stays in reach however many slots are listed. */
+.lobby .phone-foot { position: sticky; bottom: 0; margin-top: auto; padding: 10px 0 max(6px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--felt-deep) 28%); display: flex; flex-direction: column; gap: 6px; }
+.slot-row.open .open-slot { min-height: 46px; }
 .lobby-seats ol { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .lobby-seats li {
   display: flex;

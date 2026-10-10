@@ -13,11 +13,12 @@ export function useDeadlineNudge(): void {
   const send = RoomContext.useSend();
   const windowEnds = RoomContext.useSelector((s) => s.public.window?.endsAt ?? null);
   const cutEnds = RoomContext.useSelector((s) => (s.value === "cutting" ? s.public.cutEndsAt : null));
+  const aiAt = RoomContext.useSelector((s) => s.public.aiActAt);
   useEffect(() => {
-    if (windowEnds === null && cutEnds === null) return;
+    if (windowEnds === null && cutEnds === null && aiAt === null) return;
     const timer = setInterval(() => {
-      if (nudgeDue([windowEnds, cutEnds], Date.now())) send({ type: "TICK" });
+      if (nudgeDue([windowEnds, cutEnds, aiAt], Date.now())) send({ type: "TICK" });
     }, EVERY_MS);
     return () => clearInterval(timer);
-  }, [windowEnds, cutEnds, send]);
+  }, [windowEnds, cutEnds, aiAt, send]);
 }

@@ -1,7 +1,7 @@
 # Run Set Jimmy
 
 A rummy-style card game of runs and sets over 7 rounds, for grown-ups (extended family and
-friends, 2–7 players). The TV shows the table; each player holds their hand on a phone. An OGS game
+friends, 3–7 seats: people, or AI players the room plays itself). The TV shows the table; each player holds their hand on a phone. An OGS game
 (appId `run-set-jimmy`): cast through the OGS app, or played in plain browsers.
 
 - **Stack:** Cloudflare Worker + one Durable Object per room through actor-kit 0.52.6 (patched),

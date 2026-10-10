@@ -57,7 +57,7 @@ describe("bots play whole games", () => {
     expect(result.winners.length).toBeGreaterThanOrEqual(1);
   });
 
-  it.each([2, 3, 7])("%i players finish too", (players) => {
+  it.each([3, 7])("%i players finish too", (players) => {
     expect(playGame({ seed: 11, players }).rounds).toHaveLength(7);
   });
 });

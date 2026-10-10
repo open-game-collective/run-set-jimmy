@@ -1,3 +1,4 @@
+import { MIN_PLAYERS } from "./game/cards";
 import { standings, winners } from "./game/game";
 import type { Card } from "./game/cards";
 import {
@@ -12,6 +13,9 @@ import {
   type TableMeld,
 } from "./game/round";
 import type { PlayerView, RoomPrivateContext, RoomPublicContext, RoomServerContext, RoomServerOnlyContext } from "./room.types";
+
+/** The host: the first person at the table (AI players never host). -1 before anyone sits. */
+export const hostIndex = (server: RoomServerOnlyContext): number => server.seats.findIndex((s) => !s.ai);
 
 /**
  * Households (OGS multiCouch). A seat sits with the household its verified token named, else with
@@ -132,6 +136,7 @@ function seatView(
     avatar: s.avatar,
     ...inRoundView(roundSeats.find((x) => x.id === s.id)),
     couch: couchLabel(server, seat, multi),
+    ai: s.ai,
   };
 }
 
@@ -164,13 +169,14 @@ export function publicView(server: RoomServerOnlyContext, base: Pick<RoomPublicC
   return {
     roomCode: base.roomCode,
     seats: server.seats.map((s, i) => seatView(server, s, i, roundSeats, multi)),
-    hostSeat: server.seats.length > 0 ? 0 : null,
-    canStart: server.seats.length >= 2,
+    hostSeat: hostIndex(server) >= 0 ? hostIndex(server) : null,
+    canStart: hostIndex(server) >= 0 && server.seats.length >= MIN_PLAYERS,
     round: server.roundNumber,
     requirement: requirementView(server.roundNumber),
     dealer: dealerView(server),
     cutter: server.cutter,
     cutEndsAt: server.cutEndsAt,
+    aiActAt: server.aiActAt,
     cut: server.cut,
     turn: null,
     turnPhase: null,
@@ -206,7 +212,7 @@ export function playerView(server: RoomServerOnlyContext, seat: number): PlayerV
   const r = server.round;
   return {
     seat,
-    isHost: seat === 0,
+    isHost: seat === hostIndex(server),
     hand: handIn(r, id),
     myTurn: isTurnOf(r, id),
     canBuy: r !== null && requestBuy(r, id).ok,

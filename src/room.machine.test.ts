@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BUY_WINDOW_MS, CUT_TIMEOUT_MS } from "./room.machine";
+import { AI_THINK_MS, BUY_WINDOW_MS, CUT_TIMEOUT_MS } from "./room.machine";
 import {
   ANN,
   BEN,
@@ -10,6 +10,7 @@ import {
   createTestActor,
   cut,
   joinPlayers,
+  botStep,
   playOutRound,
   restartRoom,
   pub,
@@ -69,13 +70,14 @@ describe("lobby", () => {
     expect(pub(room).seats).toHaveLength(0);
   });
 
-  it("needs 2 players to start, and only the host starts", () => {
+  it("needs 3 players to start, and only the host starts", () => {
     const room = createTestActor();
     send(room, ANN, { type: "JOIN", name: "Ann" });
+    send(room, BEN, { type: "JOIN", name: "Ben" });
     expect(pub(room).canStart).toBe(false);
     send(room, ANN, { type: "START" });
     expect(value(room)).toBe("lobby");
-    send(room, BEN, { type: "JOIN", name: "Ben" });
+    send(room, CAT, { type: "JOIN", name: "Cat" });
     send(room, BEN, { type: "START" });
     expect(value(room)).toBe("lobby");
     send(room, ANN, { type: "START" });
@@ -346,8 +348,8 @@ describe("rounds and the game", () => {
     expect(pub(room).gameNumber).toBe(2);
   });
 
-  it("2 players can play", () => {
-    const room = startedRoom(2);
+  it("3 players can play", () => {
+    const room = startedRoom(3);
     playOutRound(room);
     expect(value(room)).toBe("roundOver");
   });
@@ -415,5 +417,165 @@ describe("a room that restarts or sleeps keeps going (Durable Object eviction lo
     later(CUT_TIMEOUT_MS + 100);
     send(asleep, BEN, { type: "TICK" });
     expect(value(asleep)).toBe("playing.window");
+  });
+});
+
+describe("AI players (computer seats, played by the room)", () => {
+  afterEach(() => vi.restoreAllMocks());
+  const host = () => {
+    const room = createTestActor();
+    send(room, ANN, { type: "JOIN", name: "Ann" });
+    return room;
+  };
+  const seats = (room: TestRoom) => pub(room).seats.map((s) => `${s.name}${s.ai ? "*" : ""}`);
+  /** Lets the room's AI players think and act until a person is needed (or the round ends). */
+  const letAiPlay = (room: TestRoom, steps = 400) => {
+    for (let i = 0; i < steps; i++) {
+      const r = snap(room).context.server.round;
+      const turn = r?.seats[r.turn]?.id ?? "";
+      if (value(room) === "roundOver" || (r && !turn.startsWith("ai:") && r.phase.kind !== "draw")) return;
+      room.clock.increment(500);
+    }
+  };
+
+  it("the host adds them in the lobby: supper-club regulars, marked as AI, up to 7 seats", () => {
+    const room = host();
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "ADD_AI" });
+    expect(seats(room)).toEqual(["Ann", "Vera*", "Sal*"]);
+    for (let i = 0; i < 6; i++) send(room, ANN, { type: "ADD_AI" });
+    expect(pub(room).seats).toHaveLength(7);
+    expect(seats(room).slice(1)).toEqual(["Vera*", "Sal*", "Dot*", "Monty*", "Lou*", "Bea*"]);
+  });
+
+  it("only the host adds them, only in the lobby; the host can take one away", () => {
+    const room = host();
+    send(room, BEN, { type: "JOIN", name: "Ben" });
+    send(room, BEN, { type: "ADD_AI" });
+    expect(pub(room).seats).toHaveLength(2);
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "REMOVE_SEAT", seat: 2 });
+    expect(seats(room)).toEqual(["Ann", "Ben"]);
+  });
+
+  it("a game needs 3 seats, people or AI: one person and two AI players can play", () => {
+    const room = host();
+    send(room, ANN, { type: "ADD_AI" });
+    expect(pub(room).canStart).toBe(false);
+    send(room, ANN, { type: "START" });
+    expect(value(room)).toBe("lobby");
+    send(room, ANN, { type: "ADD_AI" });
+    expect(pub(room).canStart).toBe(true);
+    send(room, ANN, { type: "START" });
+    expect(value(room)).toBe("cutting");
+  });
+
+  it("the host is the first person, never an AI, wherever the seats are moved", () => {
+    const room = host();
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "MOVE_SEAT", seat: 1, to: 0 });
+    expect(seats(room)).toEqual(["Vera*", "Ann"]);
+    expect(pub(room).hostSeat).toBe(1);
+    expect(view(room, ANN).player?.isHost).toBe(true);
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "START" });
+    expect(value(room)).toBe("cutting");
+  });
+
+  it("an AI cutter cuts by itself after a moment", () => {
+    const room = host();
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "START" });
+    expect(pub(room).seats[pub(room).cutter ?? 0]?.ai).toBe(true);
+    room.clock.increment(AI_THINK_MS);
+    expect(value(room)).toBe("playing.window");
+  });
+
+  it("AI players take their turns with a pause, and the turn comes back to the person", () => {
+    const room = host();
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "START" });
+    room.clock.increment(AI_THINK_MS);
+    // Round 1: the dealer is Ann (seat 0), so Vera plays first.
+    expect(turnId(room)).toBe("ai:1");
+    const logBefore = pub(room).log.length;
+    letAiPlay(room);
+    expect(pub(room).log.length).toBeGreaterThan(logBefore);
+    expect(turnId(room)).toBe(ANN);
+    expect(pub(room).aiActAt).toBeNull();
+  });
+
+  it("a person and two AI players play a whole round to its end", () => {
+    const room = host();
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "START" });
+    room.clock.increment(AI_THINK_MS);
+    for (let i = 0; i < 4000 && value(room).startsWith("playing"); i++) {
+      if (turnId(room) === ANN || round(room).phase.kind === "draw") botStep(room);
+      else room.clock.increment(500);
+    }
+    expect(value(room)).toBe("roundOver");
+    expect(pub(room).scores).toHaveLength(1);
+  });
+
+  it("an AI that wants the discard asks to buy it in the window", () => {
+    let bought = false;
+    for (let game = 0; game < 12 && !bought; game++) {
+      const room = createTestActor();
+      joinPlayers(room, 3);
+      send(room, ANN, { type: "ADD_AI" });
+      send(room, ANN, { type: "START" });
+      cut(room);
+      for (let i = 0; i < 3000 && value(room).startsWith("playing") && !bought; i++) {
+        bought = pub(room).log.some((e) => e.kind === "buy" && e.text.startsWith("Vera"));
+        if (turnId(room).startsWith("ai:")) room.clock.increment(500);
+        else botStep(room);
+      }
+    }
+    expect(bought).toBe(true);
+  });
+
+  it("a room restarted while an AI is thinking carries on (RESUME), and a TICK wakes a sleeping one", () => {
+    const room = host();
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "START" });
+    room.clock.increment(AI_THINK_MS);
+    room.clock.increment(BUY_WINDOW_MS);
+    expect(turnId(room)).toBe("ai:1");
+    const back = restartRoom(room);
+    const before = pub(back).log.length;
+    back.clock.increment(AI_THINK_MS);
+    expect(pub(back).log.length).toBeGreaterThan(before);
+
+    const asleep = restartRoom(back, { resume: false });
+    const at = pub(asleep).aiActAt;
+    if (at !== null) {
+      const n = pub(asleep).log.length;
+      vi.spyOn(Date, "now").mockReturnValue(at + 1000);
+      send(asleep, ANN, { type: "TICK" });
+      expect(pub(asleep).log.length).toBeGreaterThan(n);
+    }
+  });
+
+  it("seven seats with five AI players play a whole game", () => {
+    const room = createTestActor();
+    joinPlayers(room, 2);
+    for (let i = 0; i < 5; i++) send(room, ANN, { type: "ADD_AI" });
+    send(room, ANN, { type: "START" });
+    for (let r = 1; r <= 7; r++) {
+      if (pub(room).cutter !== null && !pub(room).seats[pub(room).cutter ?? 0]?.ai) cut(room);
+      room.clock.increment(AI_THINK_MS);
+      for (let i = 0; i < 20_000 && value(room).startsWith("playing"); i++) {
+        if (turnId(room).startsWith("ai:")) room.clock.increment(500);
+        else botStep(room);
+      }
+      if (r < 7) send(room, ANN, { type: "NEXT_ROUND" });
+    }
+    expect(value(room)).toBe("gameOver");
+    expect(pub(room).winners.length).toBeGreaterThanOrEqual(1);
   });
 });

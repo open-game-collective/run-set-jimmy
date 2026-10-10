@@ -32,7 +32,8 @@ export type RoomStateValue = z.infer<typeof RoomStateValueSchema>;
 export type Boot = z.infer<typeof BootSchema>;
 export type OgsClaim = z.infer<typeof OgsClaimSchema>;
 
-export type Seat = { id: string; name: string; avatar: string | null };
+/** A seat at the table: a person's phone, or an AI player the room plays itself (`ai`). */
+export type Seat = { id: string; name: string; avatar: string | null; ai: boolean };
 export type Couch = { sid: string; label: string; away: boolean };
 export type LogEntry = RoomPublicContext["log"][number];
 
@@ -54,6 +55,8 @@ export type RoomServerOnlyContext = {
   windowEndsAt: number | null;
   /** When the room cuts for a cutter who hasn't (ms since epoch), while cutting. */
   cutEndsAt: number | null;
+  /** When the AI player on turn (or cutting) acts next (ms since epoch); null when no AI is to move. */
+  aiActAt: number | null;
   oops: Record<string, { line: string; seq: number }>;
   log: LogEntry[];
   seq: number;

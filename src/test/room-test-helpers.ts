@@ -93,7 +93,7 @@ export function botStep(room: TestRoom): void {
   const s = round(room);
   const turn = turnId(room);
   if (s.phase.kind === "draw" && s.phase.window === "open") {
-    for (const seat of s.seats) if (seat.id !== turn && wantsBuy(s, seat.id) && !s.phase.requests.includes(seat.id)) send(room, seat.id, { type: "BUY" });
+    for (const seat of s.seats) if (seat.id !== turn && !seat.id.startsWith("ai:") && wantsBuy(s, seat.id) && !s.phase.requests.includes(seat.id)) send(room, seat.id, { type: "BUY" });
     const move = botMove(round(room), turn);
     if (move?.type === "draw") return send(room, turn, { type: "DRAW", from: move.from });
     room.clock.increment(BUY_WINDOW_MS);

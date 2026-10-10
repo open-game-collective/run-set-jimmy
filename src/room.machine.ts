@@ -1,6 +1,6 @@
 import { produce, type Draft } from "immer";
 import { and, assign, not, setup } from "xstate";
-import { decksFor, mulberry32, type Card } from "./game/cards";
+import { MIN_PLAYERS, decksFor, mulberry32, type Card } from "./game/cards";
 import { addRound, dealerFor, newScoreSheet } from "./game/game";
 import {
   ROUNDS,
@@ -18,15 +18,23 @@ import {
   type RoundState,
   type TableMeld,
 } from "./game/round";
+import type { RunPlacement } from "./game/melds";
 import { cardName } from "./game/words";
 import type { OgsClaim, RoomEvent, RoomInput, RoomServerContext, RoomServerOnlyContext } from "./room.types";
-import { withViews } from "./views";
+import { botMove, wantsBuy, type BotAction } from "./game/bot";
+import { hostIndex, withViews } from "./views";
 
 /** How long others may ask to buy a fresh discard (RULES.md "Buying"). */
 export const BUY_WINDOW_MS = 3000;
 /** If the cutter doesn't tap the deck, the room cuts for them. */
 export const CUT_TIMEOUT_MS = 20_000;
 export const MAX_SEATS = 7;
+/** An AI player's pause before each move, so the table can follow it on the TV. */
+export const AI_THINK_MS = 1400;
+/** How long into a buy window an AI player decides whether to buy. */
+export const AI_BUY_MS = 1100;
+/** AI players are supper-club regulars (docs/art-style.md). */
+export const AI_NAMES = ["Vera", "Sal", "Dot", "Monty", "Lou", "Bea"] as const;
 const LOG_LENGTH = 8;
 
 type Args = { context: RoomServerContext; event: RoomEvent };
@@ -49,7 +57,10 @@ function log(d: Draft<RoomServerContext>, seat: number | null, kind: string, tex
   if (d.server.log.length > LOG_LENGTH) d.server.log.splice(0, d.server.log.length - LOG_LENGTH);
 }
 
-const fromHost = (args: Args) => seatOf(args.context, args.event) === 0;
+const fromHost = (args: Args) => {
+  const seat = seatOf(args.context, args.event);
+  return seat >= 0 && seat === hostIndex(args.context.server);
+};
 const fromService = ({ event }: Args) => "caller" in event && event.caller.type === "service";
 
 /** What the phone asked to be called (trimmed to 16), else "Player N". */
@@ -128,11 +139,11 @@ function meldLabel(m: Mover, target: TableMeld | undefined): string {
   return `${whose} ${target.meld.kind}`;
 }
 
-function playOnMove(m: Mover, event: Extract<MoveEvent, { type: "PLAY_ON" }>): Move {
-  const card = handCard(m.r, event.cardId);
-  const target = m.r.melds.find((x) => x.id === event.meldId);
+function playOnMove(m: Mover, cardId: string, meldId: string, placement: RunPlacement | undefined): Move {
+  const card = handCard(m.r, cardId);
+  const target = m.r.melds.find((x) => x.id === meldId);
   return {
-    result: playOn(m.r, m.id, event.cardId, event.meldId, event.placement),
+    result: playOn(m.r, m.id, cardId, meldId, placement),
     line: () => ["play", `${m.name} played the ${cardLabel(card)} on ${meldLabel(m, target)}`],
   };
 }
@@ -153,7 +164,7 @@ function playerMove(m: Mover, event: MoveEvent): Move {
     case "GO_DOWN":
       return goDownMove(m, event.melds);
     case "PLAY_ON":
-      return playOnMove(m, event);
+      return playOnMove(m, event.cardId, event.meldId, event.placement);
     case "DISCARD":
       return discardMove(m, event.cardId);
   }
@@ -222,8 +233,97 @@ function canSeat(server: RoomServerOnlyContext, id: string | null): id is string
 /** A new seat, named and pictured by the caller's verified OGS claim when there is one. */
 function newSeat(server: RoomServerOnlyContext, id: string, typed: string | undefined): RoomServerOnlyContext["seats"][number] {
   const claim = server.claims[id];
-  return { id, name: seatName(server, claim?.name ?? typed), avatar: claim?.avatar || null };
+  return { id, name: seatName(server, claim?.name ?? typed), avatar: claim?.avatar || null, ai: false };
 }
+
+/** The next AI player: the first regular not yet at the table, with an id no phone can have. */
+function newAiSeat(server: RoomServerOnlyContext): RoomServerOnlyContext["seats"][number] {
+  const taken = new Set(server.seats.map((s) => s.name));
+  const ids = new Set(server.seats.map((s) => s.id));
+  let n = 1;
+  while (ids.has(`ai:${n}`)) n++;
+  return { id: `ai:${n}`, name: seatName(server, AI_NAMES.find((x) => !taken.has(x)) ?? "Vera"), avatar: null, ai: true };
+}
+
+function addAi(context: RoomServerContext): RoomServerContext {
+  if (context.server.seats.length >= MAX_SEATS) return context;
+  const seat = newAiSeat(context.server);
+  return update(context, (d) => {
+    d.server.seats.push(seat);
+  });
+}
+
+const isAi = (server: RoomServerOnlyContext, id: string): boolean => server.seats.some((s) => s.id === id && s.ai);
+
+/** The AI player on turn and what it would do now; null when a person is on turn or it waits. */
+function aiTurn(server: RoomServerOnlyContext): { id: string; action: BotAction } | null {
+  const r = server.round;
+  const id = r?.seats[r.turn]?.id;
+  if (!r || !id || !isAi(server, id) || r.phase.kind === "out") return null;
+  const action = botMove(r, id);
+  return action ? { id, action } : null;
+}
+
+const aiMover = (server: RoomServerOnlyContext, r: RoundState, id: string): Mover => ({
+  server,
+  r,
+  id,
+  seat: server.seats.findIndex((s) => s.id === id),
+  name: nameOf(server, id),
+  top: topName(r),
+});
+
+/** The bot's choice as a move, through the same rules and log lines as a phone's. */
+function aiMove(m: Mover, a: BotAction): Move {
+  switch (a.type) {
+    case "draw":
+      return drawMove(m, a.from);
+    case "answer":
+      return answerMove(m, a.answer);
+    case "goDown":
+      return goDownMove(m, a.melds);
+    case "playOn":
+      return playOnMove(m, a.cardId, a.meldId, a.placement);
+    case "discard":
+      return discardMove(m, a.cardId);
+  }
+}
+
+/** The AI player on turn makes its move. */
+function aiAct(context: RoomServerContext): RoomServerContext {
+  const turn = aiTurn(context.server);
+  const r = context.server.round;
+  if (!turn || !r) return context;
+  const m = aiMover(context.server, r, turn.id);
+  const { result, line } = aiMove(m, turn.action);
+  return result.ok ? accept(context, m, result.state, line(result.state)) : context;
+}
+
+/** AI players (not on turn) that want the fresh discard ask to buy it. */
+function aiBuyers(server: RoomServerOnlyContext): string[] {
+  const r = server.round;
+  if (!r) return [];
+  const turnId = r.seats[r.turn]?.id;
+  return server.seats.filter((s) => s.ai && s.id !== turnId && wantsBuy(r, s.id)).map((s) => s.id);
+}
+
+function aiBuy(context: RoomServerContext): RoomServerContext {
+  return aiBuyers(context.server).reduce((ctx, id) => {
+    const r = ctx.server.round;
+    if (!r) return ctx;
+    const m = aiMover(ctx.server, r, id);
+    const { result, line } = buyMove(m);
+    return result.ok ? accept(ctx, m, result.state, line(result.state)) : ctx;
+  }, context);
+}
+
+const cutterIsAi = (server: RoomServerOnlyContext): boolean => {
+  const id = server.cutter === null ? undefined : server.seats[server.cutter]?.id;
+  return id !== undefined && isAi(server, id);
+};
+
+/** Should an AI player act soon (its turn, or its cut)? */
+const aiToMove = (server: RoomServerOnlyContext): boolean => aiTurn(server) !== null || (server.round === null && cutterIsAi(server));
 
 function join(context: RoomServerContext, event: RoomEvent): RoomServerContext {
   const id = callerId(event);
@@ -299,7 +399,7 @@ export const roomMachine = setup({
   guards: {
     fromHost,
     fromService,
-    canStart: (args) => fromHost(args) && args.context.server.seats.length >= 2,
+    canStart: (args) => fromHost(args) && args.context.server.seats.length >= MIN_PLAYERS,
     fromCutter: (args) => args.context.server.cutter !== null && seatOf(args.context, args.event) === args.context.server.cutter,
     windowOpen: ({ context }) => {
       const p = context.server.round?.phase;
@@ -310,15 +410,38 @@ export const roomMachine = setup({
     restored: ({ event }) => event.type === "RESUME" && "caller" in event && event.caller.type === "system",
     windowExpired: ({ context }) => context.server.windowEndsAt !== null && Date.now() >= context.server.windowEndsAt,
     cutExpired: ({ context }) => context.server.cutEndsAt !== null && Date.now() >= context.server.cutEndsAt,
+    aiTurn: ({ context }) => aiTurn(context.server) !== null,
+    aiWantsBuy: ({ context }) => aiBuyers(context.server).length > 0,
+    cutterIsAi: ({ context }) => cutterIsAi(context.server),
+    aiDue: ({ context }) => context.server.aiActAt !== null && Date.now() >= context.server.aiActAt,
     lastRound: ({ context }) => context.server.roundNumber >= ROUNDS,
   },
   delays: {
     // The time left, not a fresh full wait: a restored room keeps its deadlines (timers don't survive).
     buyWindow: ({ context }) => Math.max(0, (context.server.windowEndsAt ?? 0) - Date.now()),
     cutTimeout: ({ context }) => Math.max(0, (context.server.cutEndsAt ?? 0) - Date.now()),
+    aiThink: ({ context }) => Math.max(0, (context.server.aiActAt ?? 0) - Date.now()),
+    aiBuyThink: AI_BUY_MS,
   },
   actions: {
     join: assign(({ context, event }) => join(context, event)),
+    addAi: assign(({ context }) => addAi(context)),
+    aiAct: assign(({ context }) => aiAct(context)),
+    aiBuy: assign(({ context }) => aiBuy(context)),
+    /** Arms the next AI move (kept across a restart: only set when none is pending). */
+    stampAi: assign(({ context }) => {
+      const at = aiToMove(context.server) ? (context.server.aiActAt ?? Date.now() + AI_THINK_MS) : null;
+      return at === context.server.aiActAt ? context : update(context, (d) => {
+        d.server.aiActAt = at;
+      });
+    }),
+    clearAi: assign(({ context }) =>
+      context.server.aiActAt === null
+        ? context
+        : update(context, (d) => {
+            d.server.aiActAt = null;
+          }),
+    ),
     moveSeat: assign(({ context, event }) => moveSeat(context, event)),
     removeSeat: assign(({ context, event }) => {
       if (event.type !== "REMOVE_SEAT" || event.seat >= context.server.seats.length) return context;
@@ -400,6 +523,7 @@ export const roomMachine = setup({
         dealer: null,
         cutter: null,
         cutEndsAt: null,
+        aiActAt: null,
         cut: null,
         turn: null,
         turnPhase: null,
@@ -430,6 +554,7 @@ export const roomMachine = setup({
         gameNumber: 0,
         windowEndsAt: null,
         cutEndsAt: null,
+        aiActAt: null,
         oops: {},
         log: [],
         seq: 0,
@@ -447,21 +572,29 @@ export const roomMachine = setup({
       on: {
         JOIN: { actions: "join" },
         START: { guard: "canStart", target: "cutting", actions: "newGame" },
+        ADD_AI: { guard: "fromHost", actions: "addAi" },
         MOVE_SEAT: { guard: "fromHost", actions: "moveSeat" },
         REMOVE_SEAT: { guard: "fromHost", actions: "removeSeat" },
       },
     },
     cutting: {
-      entry: "setCutter",
+      entry: ["setCutter", "stampAi"],
+      exit: "clearAi",
       on: {
         CUT: { guard: "fromCutter", target: "playing", actions: "cutHere" },
-        TICK: { guard: "cutExpired", target: "playing", actions: "cutForThem" },
+        TICK: [
+          { guard: "cutExpired", target: "playing", actions: "cutForThem" },
+          { guard: and(["cutterIsAi", "aiDue"]), target: "playing", actions: "cutForThem" },
+        ],
         RESUME: [
           { guard: and(["restored", "cutExpired"]), target: "playing", actions: "cutForThem" },
           { guard: "restored", target: "cutting", reenter: true },
         ],
       },
-      after: { cutTimeout: { target: "playing", actions: "cutForThem" } },
+      after: {
+        cutTimeout: { target: "playing", actions: "cutForThem" },
+        aiThink: { guard: "cutterIsAi", target: "playing", actions: "cutForThem" },
+      },
     },
     playing: {
       initial: "window",
@@ -476,20 +609,36 @@ export const roomMachine = setup({
       },
       states: {
         window: {
-          entry: "stampWindow",
+          entry: ["stampWindow", "stampAi"],
+          exit: "clearAi",
           always: { guard: not("windowOpen"), target: "acting" },
           on: {
-            TICK: { guard: "windowExpired", target: "acting", actions: "closeWindow" },
+            TICK: [
+              { guard: "windowExpired", target: "acting", actions: "closeWindow" },
+              { guard: and(["aiTurn", "aiDue"]), target: "acting", actions: "aiAct" },
+            ],
             RESUME: [
               { guard: and(["restored", "windowExpired"]), target: "acting", actions: "closeWindow" },
               { guard: "restored", target: "window", reenter: true },
             ],
           },
-          after: { buyWindow: { target: "acting", actions: "closeWindow" } },
+          after: {
+            buyWindow: { target: "acting", actions: "closeWindow" },
+            // The AI on turn takes the discard it wants; AI players not on turn may ask to buy it.
+            aiThink: { guard: "aiTurn", target: "acting", actions: "aiAct" },
+            aiBuyThink: { guard: "aiWantsBuy", actions: "aiBuy" },
+          },
         },
         acting: {
-          entry: "clearWindowStamp",
+          entry: ["clearWindowStamp", "stampAi"],
+          exit: "clearAi",
           always: { guard: "windowOpen", target: "window" },
+          // Each AI move re-enters, re-arming the pause before its next one.
+          after: { aiThink: { guard: "aiTurn", target: "acting", reenter: true, actions: "aiAct" } },
+          on: {
+            TICK: { guard: and(["aiTurn", "aiDue"]), target: "acting", reenter: true, actions: "aiAct" },
+            RESUME: { guard: "restored", target: "acting", reenter: true },
+          },
         },
       },
     },

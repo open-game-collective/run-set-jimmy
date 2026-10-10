@@ -563,15 +563,15 @@ describe("mutation gaps", () => {
   });
 
   it("starts every hand empty: nothing down, no buys, no melds", () => {
-    const s = deal({ seatIds: ["a", "b"], round: 1, dealer: 0, rng: mulberry32(2), cutAt: 3 });
+    const s = deal({ seatIds: ["a", "b", "c"], round: 1, dealer: 0, rng: mulberry32(2), cutAt: 3 });
     expect(s.seats.every((x) => !x.down && x.buys === 0)).toBe(true);
     expect(s.melds).toEqual([]);
-    expect(s.cut?.seat).toBe("b");
+    expect(s.cut?.seat).toBe("c");
   });
 
   it("deals only real rounds", () => {
-    expect(() => deal({ seatIds: ["a", "b"], round: 8, dealer: 0, rng: mulberry32(1), cutAt: 0 })).toThrow(/No round 8/);
-    expect(() => deal({ seatIds: ["a", "b"], round: 0, dealer: 0, rng: mulberry32(1), cutAt: 0 })).toThrow(/No round 0/);
+    expect(() => deal({ seatIds: ["a", "b", "c"], round: 8, dealer: 0, rng: mulberry32(1), cutAt: 0 })).toThrow(/No round 8/);
+    expect(() => deal({ seatIds: ["a", "b", "c"], round: 0, dealer: 0, rng: mulberry32(1), cutAt: 0 })).toThrow(/No round 0/);
   });
 
   it("names every requirement", () => {

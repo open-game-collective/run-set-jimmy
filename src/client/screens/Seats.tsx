@@ -13,7 +13,7 @@ export function Seats({ pub }: { pub: RoomPublicContext }) {
   const playing = pub.round > 0;
   const away = new Set(pub.households.filter((h) => h.away).flatMap((h) => h.seats));
   return (
-    <footer className={`seats n${pub.seats.length}`} data-testid="seats">
+    <footer className={`seats n${playing ? pub.seats.length : 7}`} data-testid="seats">
       {pub.seats.map((s, i) => (
         <div
           key={`${s.name}-${i}`}
@@ -25,7 +25,10 @@ export function Seats({ pub }: { pub: RoomPublicContext }) {
             {playing && pub.dealer === i ? <em className="dealer">D</em> : null}
           </div>
           <div className="seat-text">
-            <p className="seat-name">{s.name}</p>
+            <p className="seat-name">
+              {s.name}
+              {s.ai ? <span className="ai-tag">AI</span> : null}
+            </p>
             {s.couch ? <p className="seat-couch">{away.has(i) ? `${s.couch} · away` : s.couch}</p> : null}
             {playing ? (
               <p className="seat-meta">
@@ -38,11 +41,18 @@ export function Seats({ pub }: { pub: RoomPublicContext }) {
                 </span>
               </p>
             ) : (
-              <p className="seat-meta">{i === 0 ? "Host" : "Ready"}</p>
+              <p className="seat-meta">{s.ai ? "AI player" : i === pub.hostSeat ? "Host" : "Ready"}</p>
             )}
           </div>
         </div>
       ))}
+      {playing
+        ? null
+        : Array.from({ length: Math.max(0, 7 - pub.seats.length) }, (_, k) => (
+            <div key={`open-${k}`} className="seat open" aria-label="Open slot">
+              <p className="seat-name">Open</p>
+            </div>
+          ))}
     </footer>
   );
 }

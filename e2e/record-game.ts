@@ -80,8 +80,9 @@ async function main() {
       seen.set(name, n);
       if (n > 3) return;
       await wait(450);
-      await tv.screenshot({ path: `${MOMENTS}/tv-${name}-${n}.png` });
-      await phones[0]?.screenshot({ path: `${MOMENTS}/phone-${name}-${n}.png` });
+      // Stills are extras: a slow screenshot (a busy machine) must not end the recording.
+      await tv.screenshot({ path: `${MOMENTS}/tv-${name}-${n}.png`, timeout: 15_000 }).catch(() => undefined);
+      await phones[0]?.screenshot({ path: `${MOMENTS}/phone-${name}-${n}.png`, timeout: 15_000 }).catch(() => undefined);
     },
   });
   console.log(`played ${result.rounds} rounds, ${result.actions} actions`);

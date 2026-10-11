@@ -12,7 +12,7 @@
  * skew, typically well under 50 ms, is included).
  */
 import { chromium, type Page } from "playwright";
-import { breaches, roundTrips, summarize, timerLateness, type MoveClicks, type Thresholds, type TimerSeen, type ViewChange } from "../src/test/latency-stats";
+import { breaches, percentile, roundTrips, summarize, timerLateness, type MoveClicks, type Thresholds, type TimerSeen, type ViewChange } from "../src/test/latency-stats";
 import { BASE, newRoomCode, openTv, phoneContext, playTable, seatPlayers } from "./table";
 
 /**
@@ -55,6 +55,7 @@ function instrument(): void {
       const value = get(v, "value");
       const win = get(pub, "window");
       const ends = num(get(win, "endsAt"));
+      if (ends !== null && ends !== windowEnds) lat.timers.push({ kind: "shown", deadline: ends, endedAt: Date.now() });
       if (ends !== null) windowEnds = ends;
       else if (windowEnds !== null) {
         lat.timers.push({ kind: "window", deadline: windowEnds, endedAt: Date.now() });
@@ -134,7 +135,10 @@ try {
     cut: timerLateness(timers.filter((t) => t.kind === "cut")),
   });
   const failed = breaches(summary, LIMITS);
-  console.log(JSON.stringify({ base: BASE, room: code, seconds: Math.round((Date.now() - started) / 1000), summary, limits: LIMITS, failed }, null, 2));
+  // How much of the buy window a phone gets: the time left when it first shows the window (no limit).
+  const left = timers.filter((t) => t.kind === "shown").map((t) => t.deadline - t.endedAt);
+  const windowShown = { n: left.length, p5: percentile(left, 5), p50: percentile(left, 50), min: left.length ? Math.min(...left) : null };
+  console.log(JSON.stringify({ base: BASE, room: code, seconds: Math.round((Date.now() - started) / 1000), summary, windowShownLeft: windowShown, limits: LIMITS, failed }, null, 2));
   await tv.close();
   process.exitCode = failed.length > 0 ? 1 : 0;
 } finally {

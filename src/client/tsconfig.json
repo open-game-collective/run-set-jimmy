@@ -13,7 +13,11 @@
     "../game",
     "../room.types.ts",
     "../room.schemas.ts",
-    "../room.context.tsx"
+    "../room.context.tsx",
+    "../room.wire.ts",
+    "../room.ts",
+    "../room.rules.ts",
+    "../views.ts"
   ],
   "exclude": []
 }

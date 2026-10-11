@@ -1,65 +1,115 @@
 /**
- * Typed test helpers for the room machine (same shape as Night Flight's).
+ * Typed test helpers for the room actor, over actor-kit's simulate(): the same step core as the
+ * Durable Object, a virtual clock, durable timers, journals that replayJournal() can check.
+ *
+ * The tests read the room as v1's machine did (`value`, `context.public/private/server`): what a
+ * caller sees is the view the room sends that caller, parsed back like the client parses it.
  */
-import type { ActorKitStorage } from "actor-kit";
-import { createActor, SimulatedClock } from "xstate";
-import type { Env } from "../env";
+import { simulate, type AnyContract, type SimActor, type Simulation } from "@actor-kit/test";
+import { z } from "zod";
 import { botMove, wantsBuy } from "../game/bot";
 import type { RoundState } from "../game/round";
-import { BUY_WINDOW_MS, roomMachine } from "../room.machine";
-import type { OgsClaim, RoomClientEvent, RoomEvent, RoomInput, RoomPrivateContext } from "../room.types";
+import { BUY_WINDOW_MS, RoomContract, type RoomState } from "../room";
+import type { OgsClaim, RoomClientEvent, RoomPrivateContext, RoomPublicContext, RoomShared, RoomStateValue } from "../room.types";
+import { fromWire } from "../room.wire";
 
 export const TV = "tv-1";
 export const PLAYERS = ["ann-1", "ben-1", "cat-1", "dan-1"] as const;
 export const [ANN, BEN, CAT, DAN] = PLAYERS;
+export const ROOM_CODE = "ABCD";
+/** The virtual clock starts here (ms since epoch). */
+export const START = Date.UTC(2026, 9, 11, 19, 0, 0);
 
-const TEST_ENV: Env = { ACTOR_KIT_SECRET: "test-secret" };
-/** The machine never touches storage; actor-kit's type demands a DurableObjectStorage. */
-const TEST_STORAGE = {} as unknown as ActorKitStorage;
+/**
+ * The room as a contract `simulate().send` accepts any message for. actor-kit 0.3 (pre ADR-018 B)
+ * types `send` with the top-level messages only, not the phases' (docs/actor-kit-v2-feedback.md).
+ */
+const ROOM: AnyContract = RoomContract;
 
-const inputFor = (tvId: string): RoomInput => ({
-  id: "ABCD",
-  caller: { type: "client", id: tvId },
-  env: TEST_ENV,
-  storage: TEST_STORAGE,
-});
+/** Spawning is async (init may link); tests build rooms synchronously, so rooms are branched from these. */
+const SEEDS = 48;
+async function spawnedRoom(seed: number): Promise<Simulation> {
+  const sim = simulate({ contracts: [RoomContract], seed, now: START });
+  await sim.spawn(RoomContract, ROOM_CODE, { code: ROOM_CODE, tvId: TV }, { caller: "worker", callerType: "service" });
+  return sim;
+}
+const templates = await Promise.all(Array.from({ length: SEEDS }, (_, i) => spawnedRoom(i + 1)));
+let made = 0;
 
-export function createTestActor(tvId = TV) {
-  const clock = new SimulatedClock();
-  const actor = createActor(roomMachine, { clock, input: inputFor(tvId) });
-  actor.start();
-  return { actor, clock };
+export type TestRoom = {
+  sim: Simulation;
+  actor: SimActor<typeof RoomContract>;
+  /** The room's virtual clock: increment runs every timer that comes due. */
+  clock: { increment(ms: number): void };
+};
+
+function wrap(sim: Simulation): TestRoom {
+  return { sim, actor: sim.actor(RoomContract, ROOM_CODE), clock: { increment: (ms) => sim.advance(ms) } };
 }
 
-export type TestRoom = ReturnType<typeof createTestActor>;
-
-export function send({ actor }: TestRoom, callerId: string, event: RoomClientEvent): void {
-  const full: RoomEvent = { ...event, caller: { type: "client", id: callerId }, env: TEST_ENV, storage: TEST_STORAGE };
-  actor.send(full);
+/** A fresh room in the lobby, made by the TV `tvId`. Each room deals from its own seed. */
+export function createTestActor(tvId = TV): TestRoom {
+  if (tvId !== TV) throw new Error(`test rooms are made by ${TV}`);
+  const template = templates[made++ % SEEDS];
+  if (!template) throw new Error("no room template");
+  return wrap(template.branch());
 }
 
-export function claim({ actor }: TestRoom, callerId: string, c: OgsClaim): void {
-  const full: RoomEvent = {
-    type: "OGS_CLAIM",
-    callerId,
-    claim: c,
-    caller: { type: "service", id: "ogs" },
-    env: TEST_ENV,
-    storage: TEST_STORAGE,
+export function send(room: TestRoom, callerId: string, event: RoomClientEvent): void {
+  room.sim.send(ROOM, ROOM_CODE, callerId, event);
+}
+
+export function claim(room: TestRoom, callerId: string, c: OgsClaim): void {
+  room.sim.send(ROOM, ROOM_CODE, "ogs", { type: "OGS_CLAIM", callerId, claim: c }, { callerType: "service" });
+}
+
+/**
+ * The room's persisted state. simulate() types `state` as what init returns, but an actor with
+ * states persists `{ shared, phase, local, stateTimers }` (docs/actor-kit-v2-feedback.md): checked here.
+ */
+const RoomStateZ = z.custom<RoomState>(
+  (x) =>
+    z
+      .object({
+        shared: z.object({ seats: z.array(z.unknown()) }),
+        phase: z.enum(["lobby", "cutting", "window", "acting", "roundOver", "gameOver"]),
+        stateTimers: z.array(z.string()),
+      })
+      .safeParse(x).success,
+);
+export const state = (room: TestRoom): RoomState => RoomStateZ.parse(room.actor.state);
+
+const valueOf = (phase: RoomState["phase"]): RoomStateValue => (phase === "window" || phase === "acting" ? { playing: phase } : phase);
+
+/** What `callerId` sees, as the client reads it. */
+export const seen = (room: TestRoom, callerId: string) => fromWire(room.actor.view(callerId));
+
+/** The room as v1's tests read it: the phase, what the TV sees, each caller's own slot, and the server-only state. */
+export function snap(room: TestRoom): {
+  value: RoomStateValue;
+  context: { public: RoomPublicContext; private: Record<string, RoomPrivateContext>; server: RoomShared };
+} {
+  const st = state(room);
+  const callers = [st.shared.tvId, ...st.shared.seats.filter((s) => !s.ai).map((s) => s.id)];
+  return {
+    value: valueOf(st.phase),
+    context: {
+      public: seen(room, TV).public,
+      private: Object.fromEntries(callers.map((id) => [id, seen(room, id).private])),
+      server: st.shared,
+    },
   };
-  actor.send(full);
 }
 
-export const snap = ({ actor }: TestRoom) => actor.getSnapshot();
-export const view = (room: TestRoom, callerId: string): RoomPrivateContext => snap(room).context.private[callerId] ?? {};
-export const pub = (room: TestRoom) => snap(room).context.public;
-export const value = (room: TestRoom) => {
-  const v = snap(room).value;
-  return typeof v === "string" ? v : `playing.${String((v as { playing: string }).playing)}`;
+export const view = (room: TestRoom, callerId: string): RoomPrivateContext => seen(room, callerId).private;
+export const pub = (room: TestRoom) => seen(room, TV).public;
+export const value = (room: TestRoom): string => {
+  const v = valueOf(state(room).phase);
+  return typeof v === "string" ? v : `playing.${v.playing}`;
 };
 
 export function round(room: TestRoom): RoundState {
-  const r = snap(room).context.server.round;
+  const r = state(room).shared.round;
   if (!r) throw new Error("no round dealt");
   return r;
 }
@@ -74,7 +124,7 @@ export function joinPlayers(room: TestRoom, n = 4): void {
 /** Lets the cutter cut (always the same spot) so the deal happens. */
 export function cut(room: TestRoom, at = 0.5): void {
   const cutter = pub(room).cutter;
-  const id = cutter === null ? undefined : snap(room).context.server.seats[cutter]?.id;
+  const id = cutter === null ? undefined : state(room).shared.seats[cutter]?.id;
   if (!id) throw new Error("nobody is cutting");
   send(room, id, { type: "CUT", at });
 }
@@ -122,16 +172,10 @@ export function playOutRound(room: TestRoom): void {
 }
 
 /**
- * What actor-kit does when a Durable Object restarts mid-game (a deploy, an eviction): persist the
- * snapshot, build a fresh actor from it (pending timers are NOT restored) and send RESUME. With
- * `resume: false`, the room stays asleep: no RESUME until something wakes it.
+ * What happens to the room when its Durable Object restarts (an eviction, a deploy): its state,
+ * journal and pending timers are stored, so the room carries on as it was. In the simulation that
+ * is an independent copy of it.
  */
-export function restartRoom(room: TestRoom, opts: { resume?: boolean } = {}): TestRoom {
-  const persisted = room.actor.getPersistedSnapshot();
-  room.actor.stop();
-  const clock = new SimulatedClock();
-  const actor = createActor(roomMachine, { clock, snapshot: persisted, input: inputFor(TV) });
-  actor.start();
-  if (opts.resume !== false) actor.send({ type: "RESUME", caller: { type: "system", id: "ABCD" }, env: TEST_ENV, storage: TEST_STORAGE } as RoomEvent);
-  return { actor, clock };
+export function restartRoom(room: TestRoom): TestRoom {
+  return wrap(room.sim.branch());
 }

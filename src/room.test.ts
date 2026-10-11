@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AI_THINK_MS, BUY_WINDOW_MS, CUT_TIMEOUT_MS } from "./room.machine";
+import { AI_THINK_MS, BUY_WINDOW_MS, CUT_TIMEOUT_MS } from "./room";
 import {
   ANN,
   BEN,
@@ -363,60 +363,33 @@ describe("rounds and the game", () => {
   });
 });
 
-describe("a room that restarts or sleeps keeps going (Durable Object eviction loses timers)", () => {
-  afterEach(() => vi.restoreAllMocks());
-  const later = (ms: number) => {
-    const now = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(now + ms);
-  };
-
-  it("restarted after the buy window's time is up: closes it at once", () => {
-    const room = startedRoom();
-    later(BUY_WINDOW_MS + 100);
-    const back = restartRoom(room);
-    expect(value(back)).toBe("playing.acting");
-    expect(pub(back).window).toBeNull();
-  });
-
-  it("restarted during the window: keeps its deadline and closes when the time left runs out", () => {
+describe("a room that restarts keeps going (its state and timers are stored, ADR-015)", () => {
+  it("restarted during the window: keeps its deadline and closes on time, with no screen nudging it", () => {
     const room = startedRoom();
     const endsAt = pub(room).window?.endsAt;
     const back = restartRoom(room);
     expect(value(back)).toBe("playing.window");
     expect(pub(back).window?.endsAt).toBe(endsAt);
-    back.clock.increment(BUY_WINDOW_MS);
+    back.clock.increment(BUY_WINDOW_MS - 1);
+    expect(value(back)).toBe("playing.window");
+    back.clock.increment(1);
     expect(value(back)).toBe("playing.acting");
+    expect(pub(back).window).toBeNull();
   });
 
-  it("asleep with no timer: a phone's TICK after the deadline closes the window; before it, nothing", () => {
-    const room = startedRoom();
-    const asleep = restartRoom(room, { resume: false });
-    send(asleep, CAT, { type: "TICK" });
-    expect(value(asleep)).toBe("playing.window");
-    later(BUY_WINDOW_MS + 100);
-    send(asleep, CAT, { type: "TICK" });
-    expect(value(asleep)).toBe("playing.acting");
-  });
-
-  it("the cut: a restart re-arms its timeout, and a TICK after it cuts for the cutter", () => {
+  it("the cut: a restart keeps its timeout, and the room cuts for the cutter on time", () => {
     const room = createTestActor();
     joinPlayers(room);
     send(room, ANN, { type: "START" });
-    expect(pub(room).cutEndsAt).toBeGreaterThan(Date.now());
+    const endsAt = pub(room).cutEndsAt;
+    expect(endsAt).not.toBeNull();
     const back = restartRoom(room);
     expect(value(back)).toBe("cutting");
-    back.clock.increment(CUT_TIMEOUT_MS);
+    expect(pub(back).cutEndsAt).toBe(endsAt);
+    back.clock.increment(CUT_TIMEOUT_MS - 1);
+    expect(value(back)).toBe("cutting");
+    back.clock.increment(1);
     expect(value(back)).toBe("playing.window");
-
-    const room2 = createTestActor();
-    joinPlayers(room2);
-    send(room2, ANN, { type: "START" });
-    const asleep = restartRoom(room2, { resume: false });
-    send(asleep, BEN, { type: "TICK" });
-    expect(value(asleep)).toBe("cutting");
-    later(CUT_TIMEOUT_MS + 100);
-    send(asleep, BEN, { type: "TICK" });
-    expect(value(asleep)).toBe("playing.window");
   });
 });
 
@@ -538,7 +511,7 @@ describe("AI players (computer seats, played by the room)", () => {
     expect(bought).toBe(true);
   });
 
-  it("a room restarted while an AI is thinking carries on (RESUME), and a TICK wakes a sleeping one", () => {
+  it("a room restarted while an AI is thinking carries on", () => {
     const room = host();
     send(room, ANN, { type: "ADD_AI" });
     send(room, ANN, { type: "ADD_AI" });
@@ -550,15 +523,6 @@ describe("AI players (computer seats, played by the room)", () => {
     const before = pub(back).log.length;
     back.clock.increment(AI_THINK_MS);
     expect(pub(back).log.length).toBeGreaterThan(before);
-
-    const asleep = restartRoom(back, { resume: false });
-    const at = pub(asleep).aiActAt;
-    if (at !== null) {
-      const n = pub(asleep).log.length;
-      vi.spyOn(Date, "now").mockReturnValue(at + 1000);
-      send(asleep, ANN, { type: "TICK" });
-      expect(pub(asleep).log.length).toBeGreaterThan(n);
-    }
   });
 
   it("seven seats with five AI players play a whole game", () => {

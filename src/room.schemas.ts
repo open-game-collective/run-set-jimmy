@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const RoomInputPropsSchema = z.object({});
+export const RoomInputSchema = z.object({
+  /** The room code (4 letters). */
+  code: z.string().regex(/^[A-Z]{4}$/),
+  /** The caller id of the TV page that made the room. */
+  tvId: z.string().min(1).max(80),
+});
 
 const SuitSchema = z.enum(["S", "H", "D", "C"]);
 export const CardSchema = z.discriminatedUnion("kind", [
@@ -14,35 +19,51 @@ const PlacementSchema = z.union([
   z.object({ replace: z.number().int().min(0).max(13), jokerTo: z.enum(["low", "high"]) }),
 ]);
 
-export const RoomClientEventSchema = z.discriminatedUnion("type", [
+/** Message payloads (everything but `type`), parsed by the room before any handler runs. */
+export const Payloads = {
   // Lobby: take a seat (plain browser: typed name; OGS: the verified profile name wins).
-  z.object({ type: z.literal("JOIN"), name: z.string().trim().max(16).optional() }),
-  z.object({ type: z.literal("START") }),
+  JOIN: z.object({ name: z.string().trim().max(16).optional() }),
+  START: z.object({}),
   // Host, lobby: put an AI player in the next open seat.
-  z.object({ type: z.literal("ADD_AI") }),
+  ADD_AI: z.object({}),
   // Host: put a seat elsewhere in the turn order (match the couch), or take it away (lobby only).
-  z.object({ type: z.literal("MOVE_SEAT"), seat: z.number().int().min(0).max(6), to: z.number().int().min(0).max(6) }),
-  z.object({ type: z.literal("REMOVE_SEAT"), seat: z.number().int().min(0).max(6) }),
+  MOVE_SEAT: z.object({ seat: z.number().int().min(0).max(6), to: z.number().int().min(0).max(6) }),
+  REMOVE_SEAT: z.object({ seat: z.number().int().min(0).max(6) }),
   // The cutter taps the deck: where along it, 0–1.
-  z.object({ type: z.literal("CUT"), at: z.number().min(0).max(1) }),
-  z.object({ type: z.literal("DRAW"), from: z.enum(["deck", "discard"]) }),
-  z.object({ type: z.literal("BUY") }),
-  z.object({ type: z.literal("ANSWER"), answer: z.enum(["take", "let-go"]) }),
-  z.object({
-    type: z.literal("GO_DOWN"),
+  CUT: z.object({ at: z.number().min(0).max(1) }),
+  DRAW: z.object({ from: z.enum(["deck", "discard"]) }),
+  BUY: z.object({}),
+  ANSWER: z.object({ answer: z.enum(["take", "let-go"]) }),
+  GO_DOWN: z.object({
     melds: z
       .array(z.object({ kind: z.enum(["run", "set"]), cardIds: z.array(CardId).min(3).max(14), spare: z.enum(["high", "low"]).optional() }))
       .min(1)
       .max(3),
   }),
-  z.object({ type: z.literal("PLAY_ON"), cardId: CardId, meldId: z.string().min(1).max(8), placement: PlacementSchema.optional() }),
-  z.object({ type: z.literal("DISCARD"), cardId: CardId }),
-  z.object({ type: z.literal("NEXT_ROUND") }),
-  // Any screen, once a deadline (buy window, cut) has passed: wakes a room whose timer was lost.
-  z.object({ type: z.literal("TICK") }),
-  z.object({ type: z.literal("NEW_GAME") }),
+  PLAY_ON: z.object({ cardId: CardId, meldId: z.string().min(1).max(8), placement: PlacementSchema.optional() }),
+  DISCARD: z.object({ cardId: CardId }),
+  NEXT_ROUND: z.object({}),
+  NEW_GAME: z.object({}),
   // A TV parked by the OGS launcher (Home) or back (Continue): its household is away meanwhile.
-  z.object({ type: z.literal("AWAY"), away: z.boolean() }),
+  AWAY: z.object({ away: z.boolean() }),
+} as const;
+
+export const RoomClientEventSchema = z.discriminatedUnion("type", [
+  Payloads.JOIN.extend({ type: z.literal("JOIN") }),
+  Payloads.START.extend({ type: z.literal("START") }),
+  Payloads.ADD_AI.extend({ type: z.literal("ADD_AI") }),
+  Payloads.MOVE_SEAT.extend({ type: z.literal("MOVE_SEAT") }),
+  Payloads.REMOVE_SEAT.extend({ type: z.literal("REMOVE_SEAT") }),
+  Payloads.CUT.extend({ type: z.literal("CUT") }),
+  Payloads.DRAW.extend({ type: z.literal("DRAW") }),
+  Payloads.BUY.extend({ type: z.literal("BUY") }),
+  Payloads.ANSWER.extend({ type: z.literal("ANSWER") }),
+  Payloads.GO_DOWN.extend({ type: z.literal("GO_DOWN") }),
+  Payloads.PLAY_ON.extend({ type: z.literal("PLAY_ON") }),
+  Payloads.DISCARD.extend({ type: z.literal("DISCARD") }),
+  Payloads.NEXT_ROUND.extend({ type: z.literal("NEXT_ROUND") }),
+  Payloads.NEW_GAME.extend({ type: z.literal("NEW_GAME") }),
+  Payloads.AWAY.extend({ type: z.literal("AWAY") }),
 ]);
 
 /** OGS: who a caller is (verified game token, worker.ts) and which couch they sit on. */
@@ -53,10 +74,8 @@ export const OgsClaimSchema = z.object({
   couch: z.object({ sid: z.string().min(1).max(100), label: z.string().min(1).max(60) }).nullable(),
 });
 
-export const RoomServiceEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("NOOP") }),
-  z.object({ type: z.literal("OGS_CLAIM"), callerId: z.string().min(1), claim: OgsClaimSchema }),
-]);
+/** Only the OGS service (worker.ts, after verifying a game token) says who a caller is. */
+export const OgsClaimPayload = z.object({ callerId: z.string().min(1), claim: OgsClaimSchema });
 
 const MeldViewSchema = z.object({
   id: z.string(),
@@ -83,8 +102,8 @@ export const SeatViewSchema = z.object({
 
 const LogSchema = z.object({ seq: z.number(), seat: z.number().nullable(), text: z.string(), kind: z.string() });
 
-// Client-visible context. Types in room.types.ts are inferred from these, and the boot payload each
-// page receives is parsed with them.
+// What every screen sees. Types in room.types.ts are inferred from these; the client parses each
+// view it receives (src/room.wire.ts) into these shapes.
 export const RoomPublicContextSchema = z.object({
   roomCode: z.string(),
   seats: z.array(SeatViewSchema),
@@ -96,7 +115,7 @@ export const RoomPublicContextSchema = z.object({
   cutter: z.number().nullable(),
   /** While cutting: when the room cuts for the cutter (ms since epoch). */
   cutEndsAt: z.number().nullable(),
-  /** When an AI player acts next (ms since epoch), so screens can wake a sleeping room. */
+  /** When an AI player acts next (ms since epoch). */
   aiActAt: z.number().nullable(),
   cut: z.object({ seat: z.number(), card: CardSchema, kept: z.boolean(), seq: z.number() }).nullable(),
   turn: z.number().nullable(),
@@ -141,14 +160,12 @@ export const RoomStateValueSchema = z.union([
   z.object({ playing: z.enum(["acting", "window"]) }),
 ]);
 
+/** What the Worker inlines into a TV or phone page: the caller's signed id and its first view. */
 export const BootSchema = z.object({
-  host: z.string(),
   roomCode: z.string(),
-  accessToken: z.string(),
-  checksum: z.string(),
-  snapshot: z.object({
-    public: RoomPublicContextSchema,
-    private: RoomPrivateContextSchema,
-    value: RoomStateValueSchema,
-  }),
+  /** The caller id (the page's `t`) and its signature: the socket URL carries both (worker.ts). */
+  id: z.string(),
+  sig: z.string(),
+  /** The view as the room sent it (src/room.wire.ts parses it). */
+  view: z.unknown(),
 });

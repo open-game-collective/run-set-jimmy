@@ -1,13 +1,29 @@
-import type { Caller } from "actor-kit";
-import { createAccessToken } from "actor-kit/server";
+import { createActorClass, withCallerIdentity } from "@actor-kit/worker";
 import { verifyOgsToken } from "@open-game-system/profile-kit/server";
+import type { Env } from "./env";
 import { APP_ID } from "./game/sitting";
+import { signId, verifyId } from "./identity";
 import { hostTarget, ogsClaim } from "./ogs-claim";
-import { actorKitRouter, type WorkerEnv } from "./room.server";
-import type { Boot } from "./room.types";
+import { RoomContract } from "./room";
+import type { Boot, RoomClientEvent } from "./room.types";
 
-export { Room } from "./room.server";
-export { Game, Remix, Session } from "./legacy-objects";
+/** The room actor (actor-kit v2). v1's `Room` class stays as a placeholder (src/legacy-objects.ts). */
+export const RoomActor = createActorClass(RoomContract);
+export { Game, Remix, Room, Session } from "./legacy-objects";
+
+type RoomStub = {
+  spawn(input: { actorId: string; caller: string; callerType: "service"; input: { code: string; tvId: string } }): Promise<void>;
+  getSnapshot(caller: string, callerType: "user" | "service"): Promise<{ checksum: string; snapshot: unknown; role: string }>;
+  send(caller: string, callerType: "user" | "service", event: RoomClientEvent | { type: "OGS_CLAIM"; callerId: string; claim: unknown }): Promise<{ ok: boolean; error?: string }>;
+  fetch(req: Request): Promise<Response>;
+};
+
+export interface WorkerEnv extends Env {
+  ASSETS: Fetcher;
+  ROOM: { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): RoomStub };
+}
+
+const stubFor = (env: WorkerEnv, code: string): RoomStub => env.ROOM.get(env.ROOM.idFromName(code));
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 const ROOM_CODE = /^[A-Z]{4}$/;
@@ -24,8 +40,8 @@ function inlineJson(value: unknown): string {
 }
 
 /**
- * Serves /tv/:roomId and /join/:roomCode. The `t` query param is the caller's
- * rejoin token: it becomes the actor-kit caller id, so a refreshed page keeps its role.
+ * Serves /tv/:roomId and /join/:roomCode. The `t` query param is the caller's rejoin token: it is
+ * the room's caller id, so a refreshed page keeps its role. The page gets it signed, for its socket.
  */
 async function servePage(req: Request, env: WorkerEnv, page: "tv" | "join", roomCode: string): Promise<Response> {
   const url = new URL(req.url);
@@ -35,32 +51,32 @@ async function servePage(req: Request, env: WorkerEnv, page: "tv" | "join", room
     return Response.redirect(url.toString(), 302);
   }
 
-  const caller: Caller = { id: token, type: "client" };
-  const stub = env.ROOM.get(env.ROOM.idFromName(roomCode));
-  if (page === "tv") {
-    await stub.spawn({ actorType: "room", actorId: roomCode, caller, input: {} });
-  }
+  const stub = stubFor(env, roomCode);
+  // The first TV page makes the room (later TVs, of other households, just watch it).
+  if (page === "tv") await stub.spawn({ actorId: roomCode, caller: "worker", callerType: "service", input: { code: roomCode, tvId: token } });
 
-  let payload: Awaited<ReturnType<typeof stub.getSnapshot>>;
+  let snap: Awaited<ReturnType<RoomStub["getSnapshot"]>>;
   try {
-    payload = await stub.getSnapshot(caller);
+    snap = await stub.getSnapshot(token, "user");
   } catch {
     return new Response("No game with that code.", { status: 404 });
   }
 
-  const accessToken = await createAccessToken({
-    signingKey: env.ACTOR_KIT_SECRET,
-    actorId: roomCode,
-    actorType: "room",
-    callerId: caller.id,
-    callerType: caller.type,
-  });
-
-  const boot: Boot = { host: url.host, roomCode, accessToken, checksum: payload.checksum, snapshot: payload.snapshot };
+  const boot: Boot = { roomCode, id: token, sig: await signId(token, env.ACTOR_KIT_SECRET), view: snap.snapshot };
   const html = await (await env.ASSETS.fetch(new URL(`/${page}`, url))).text();
   return new Response(html.replace("<!--BOOT-->", `<script id="boot" type="application/json">${inlineJson(boot)}</script>`), {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
+}
+
+/** /api/:code/ws?id&sig: a page's socket, opened as the caller id the Worker signed for it. */
+async function socket(req: Request, env: WorkerEnv, code: string): Promise<Response> {
+  if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id") ?? "";
+  const sig = url.searchParams.get("sig") ?? "";
+  if (!TOKEN.test(id) || !(await verifyId(id, sig, env.ACTOR_KIT_SECRET))) return new Response("Forbidden", { status: 403 });
+  return stubFor(env, code).fetch(withCallerIdentity(req, { callerId: id, callerType: "user", supportsBinary: true }));
 }
 
 /**
@@ -75,10 +91,7 @@ async function hostRoom(req: Request, env: WorkerEnv): Promise<Response> {
   const { join: joining } = hostTarget(url);
   const roomCode = joining ?? newRoomCode();
   const tvToken = crypto.randomUUID();
-  if (!joining) {
-    const stub = env.ROOM.get(env.ROOM.idFromName(roomCode));
-    await stub.spawn({ actorType: "room", actorId: roomCode, caller: { id: tvToken, type: "client" }, input: {} });
-  }
+  if (!joining) await stubFor(env, roomCode).spawn({ actorId: roomCode, caller: "worker", callerType: "service", input: { code: roomCode, tvId: tvToken } });
   const join = new URL(`/join/${roomCode}`, url);
   join.searchParams.set("t", crypto.randomUUID());
   join.searchParams.set("tv", tvToken);
@@ -108,7 +121,7 @@ function wsProbe(req: Request): Response {
 }
 
 export default {
-  async fetch(req: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response> {
+  async fetch(req: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(req.url);
     const [, head, rawCode] = url.pathname.split("/");
     const roomCode = rawCode?.toUpperCase() ?? "";
@@ -118,7 +131,7 @@ export default {
     if (url.pathname === "/" && joining) return Response.redirect(new URL(`/host?ogsRoom=${joining}`, url).toString(), 302);
     // A plain browser gets a new room's TV page; ?as=tv keeps a phone or tablet on it (the start screen's "Use this screen as the TV").
     if (url.pathname === "/") return Response.redirect(new URL(`/tv/${newRoomCode()}${url.searchParams.get("as") === "tv" ? "?as=tv" : ""}`, url).toString(), 302);
-    if (head === "api") return actorKitRouter(req, env, ctx);
+    if (head === "api" && ROOM_CODE.test(roomCode) && url.pathname.split("/")[3] === "ws") return socket(req, env, roomCode);
     if (url.pathname === "/host") return hostRoom(req, env);
     if (url.pathname === "/ws-probe") return wsProbe(req);
     if (head === "ogs" && rawCode === "claim") {
@@ -127,12 +140,11 @@ export default {
       return ogsClaim(req, room, {
         verify: (token) => verifyOgsToken(token, { appId: APP_ID, ...(env.OGS_JWKS_URL ? { jwksUrl: env.OGS_JWKS_URL } : {}) }),
         send: async (code, event) => {
-          const stub = env.ROOM.get(env.ROOM.idFromName(code));
-          // Wakes the room's actor (and throws for a room that doesn't exist).
-          await stub.getSnapshot({ id: "ogs", type: "service" });
-          // actor-kit's RPC type leaves out `caller`, but the room reads it (only a service may say this).
-          const fromOgs = { ...event, caller: { id: "ogs", type: "service" as const } };
-          await stub.send(fromOgs);
+          const stub = stubFor(env, code);
+          // Throws for a room that doesn't exist.
+          await stub.getSnapshot("ogs", "service");
+          const sent = await stub.send("ogs", "service", event);
+          if (!sent.ok) throw new Error(`OGS_CLAIM refused: ${sent.error ?? "unknown"}`);
         },
       });
     }

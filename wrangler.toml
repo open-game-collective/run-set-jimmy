@@ -12,7 +12,7 @@ binding = "ASSETS"
 
 [[durable_objects.bindings]]
 name = "ROOM"
-class_name = "Room"
+class_name = "RoomActor"
 
 # v1 was the 2024 Remix prototype's (its classes stay as placeholders: src/legacy-objects.ts).
 [[migrations]]
@@ -23,7 +23,13 @@ new_sqlite_classes = ["Remix", "Session", "Game"]
 tag = "v2"
 new_sqlite_classes = ["Room"]
 
+# actor-kit v2 rooms (v1's Room stays as a placeholder: src/legacy-objects.ts). A class change:
+# `wrangler rollback` cannot cross it (roll back by deploying the rollback branch, docs/spec.md).
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["RoomActor"]
+
 [vars]
 # Keys that sign OGS game tokens. Local tests point it at their own key set:
-# --var OGS_JWKS_URL:http://localhost:8831/.well-known/jwks.json
+# --var OGS_JWKS_URL:http://localhost:8837/.well-known/jwks.json
 OGS_JWKS_URL = "https://opengame-api.jonathanrmumm.workers.dev/.well-known/jwks.json"

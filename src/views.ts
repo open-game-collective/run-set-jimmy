@@ -12,10 +12,10 @@ import {
   type Seat as RoundSeat,
   type TableMeld,
 } from "./game/round";
-import type { PlayerView, RoomPrivateContext, RoomPublicContext, RoomServerContext, RoomServerOnlyContext } from "./room.types";
+import type { Deadlines, PlayerView, RoomPublicContext, RoomShared } from "./room.types";
 
 /** The host: the first person at the table (AI players never host). -1 before anyone sits. */
-export const hostIndex = (server: RoomServerOnlyContext): number => server.seats.findIndex((s) => !s.ai);
+export const hostIndex = (server: RoomShared): number => server.seats.findIndex((s) => !s.ai);
 
 /**
  * Households (OGS multiCouch). A seat sits with the household its verified token named, else with
@@ -23,34 +23,34 @@ export const hostIndex = (server: RoomServerOnlyContext): number => server.seats
  */
 export const HOME = "home";
 
-export function seatCouch(server: RoomServerOnlyContext, seat: number): string {
+export function seatCouch(server: RoomShared, seat: number): string {
   const id = server.seats[seat]?.id;
   return (id && server.couchOf[id]) || server.couchOf[server.tvId] || HOME;
 }
 
 /** Households that have players, in arrival order. */
-export function seatedCouches(server: RoomServerOnlyContext): string[] {
+export function seatedCouches(server: RoomShared): string[] {
   const seated = new Set(server.seats.map((_, i) => seatCouch(server, i)));
   const known = server.couches.map((c) => c.sid).filter((sid) => seated.has(sid));
   return [...known, ...[...seated].filter((sid) => !known.includes(sid))];
 }
 
-export const isMultiCouch = (server: RoomServerOnlyContext): boolean => seatedCouches(server).length > 1;
+export const isMultiCouch = (server: RoomShared): boolean => seatedCouches(server).length > 1;
 
-const seatsOnCouch = (server: RoomServerOnlyContext, sid: string): number[] =>
+const seatsOnCouch = (server: RoomShared, sid: string): number[] =>
   server.seats.flatMap((_, i) => (seatCouch(server, i) === sid ? [i] : []));
 
-function householdView(server: RoomServerOnlyContext, sid: string): RoomPublicContext["households"][number] {
+function householdView(server: RoomShared, sid: string): RoomPublicContext["households"][number] {
   const c = server.couches.find((x) => x.sid === sid);
   return { sid, label: c?.label ?? "Home", away: c?.away ?? false, seats: seatsOnCouch(server, sid) };
 }
 
-function householdsView(server: RoomServerOnlyContext): RoomPublicContext["households"] {
+function householdsView(server: RoomShared): RoomPublicContext["households"] {
   if (!isMultiCouch(server)) return [];
   return seatedCouches(server).map((sid) => householdView(server, sid));
 }
 
-const seatIndexOf = (server: RoomServerOnlyContext, id: string) => server.seats.findIndex((s) => s.id === id);
+const seatIndexOf = (server: RoomShared, id: string) => server.seats.findIndex((s) => s.id === id);
 
 /** The requester who would get the card if the turn player lets it go: closest after them. */
 function buyerOf(r: RoundState, requests: readonly string[]): string | null {
@@ -65,10 +65,8 @@ function buyerOf(r: RoundState, requests: readonly string[]): string | null {
 type SeatIndex = (id: string) => number;
 
 /** The open buy window: when it closes and who has asked. */
-function windowView(server: RoomServerOnlyContext, phase: Phase, index: SeatIndex): RoomPublicContext["window"] {
-  return phase.kind === "draw" && phase.window === "open"
-    ? { endsAt: server.windowEndsAt ?? 0, requests: phase.requests.map(index) }
-    : null;
+function windowView(endsAt: number | null, phase: Phase, index: SeatIndex): RoomPublicContext["window"] {
+  return phase.kind === "draw" && phase.window === "open" ? { endsAt: endsAt ?? 0, requests: phase.requests.map(index) } : null;
 }
 
 /** The offer to the turn player: who asked, and who would get the card. */
@@ -95,7 +93,7 @@ function turnView(r: RoundState, index: SeatIndex): Pick<RoomPublicContext, "tur
   return r.phase.kind === "out" ? { turn: null, roundWinner: index(r.phase.winner) } : { turn: r.turn, roundWinner: null };
 }
 
-function roundView(server: RoomServerOnlyContext): Partial<RoomPublicContext> {
+function roundView(server: RoomShared, windowEndsAt: number | null): Partial<RoomPublicContext> {
   const r = server.round;
   if (!r) return {};
   const index = (id: string) => seatIndexOf(server, id);
@@ -106,7 +104,7 @@ function roundView(server: RoomServerOnlyContext): Partial<RoomPublicContext> {
     deckCount: r.deck.length,
     discardTop: r.discard.at(-1) ?? null,
     discardCount: r.discard.length,
-    window: windowView(server, r.phase, index),
+    window: windowView(windowEndsAt, r.phase, index),
     offer: offerView(r, index),
     melds: r.melds.map((m) => meldView(m, index)),
     roundWinner,
@@ -119,14 +117,14 @@ function inRoundView(inRound: RoundSeat | undefined): { cards: number; down: boo
 }
 
 /** The seat's household label, shown only when more than one household plays. */
-function couchLabel(server: RoomServerOnlyContext, seat: number, multi: boolean): string | null {
+function couchLabel(server: RoomShared, seat: number, multi: boolean): string | null {
   if (!multi) return null;
   return server.couches.find((c) => c.sid === seatCouch(server, seat))?.label ?? "Home";
 }
 
 function seatView(
-  server: RoomServerOnlyContext,
-  s: RoomServerOnlyContext["seats"][number],
+  server: RoomShared,
+  s: RoomShared["seats"][number],
   seat: number,
   roundSeats: readonly RoundSeat[],
   multi: boolean,
@@ -146,11 +144,11 @@ function requirementView(round: number): RoomPublicContext["requirement"] {
   return { ...req, text: describeRequirement(req), name: ROUND_NAMES[round - 1] ?? "" };
 }
 
-const dealerView = (server: RoomServerOnlyContext): number | null =>
+const dealerView = (server: RoomShared): number | null =>
   server.roundNumber > 0 ? (server.roundNumber - 1) % Math.max(1, server.seats.length) : null;
 
 /** Each round's scores, the running totals and the winners, by seat. */
-function sheetView(server: RoomServerOnlyContext): Pick<RoomPublicContext, "scores" | "totals" | "winners"> {
+function sheetView(server: RoomShared): Pick<RoomPublicContext, "scores" | "totals" | "winners"> {
   const sheet = server.sheet;
   if (!sheet) return { scores: [], totals: server.seats.map(() => 0), winners: [] };
   return {
@@ -160,14 +158,14 @@ function sheetView(server: RoomServerOnlyContext): Pick<RoomPublicContext, "scor
   };
 }
 
-const roundSeatsOf = (server: RoomServerOnlyContext): readonly RoundSeat[] => server.round?.seats ?? [];
+const roundSeatsOf = (server: RoomShared): readonly RoundSeat[] => server.round?.seats ?? [];
 
-export function publicView(server: RoomServerOnlyContext, base: Pick<RoomPublicContext, "roomCode">): RoomPublicContext {
+export function publicView(server: RoomShared, deadlines: Deadlines): RoomPublicContext {
   const multi = isMultiCouch(server);
   const roundSeats = roundSeatsOf(server);
   const { scores, totals, winners: won } = sheetView(server);
   return {
-    roomCode: base.roomCode,
+    roomCode: server.roomCode,
     seats: server.seats.map((s, i) => seatView(server, s, i, roundSeats, multi)),
     hostSeat: hostIndex(server) >= 0 ? hostIndex(server) : null,
     canStart: hostIndex(server) >= 0 && server.seats.length >= MIN_PLAYERS,
@@ -175,8 +173,8 @@ export function publicView(server: RoomServerOnlyContext, base: Pick<RoomPublicC
     requirement: requirementView(server.roundNumber),
     dealer: dealerView(server),
     cutter: server.cutter,
-    cutEndsAt: server.cutEndsAt,
-    aiActAt: server.aiActAt,
+    cutEndsAt: deadlines.cutEndsAt,
+    aiActAt: deadlines.aiActAt,
     cut: server.cut,
     turn: null,
     turnPhase: null,
@@ -187,7 +185,7 @@ export function publicView(server: RoomServerOnlyContext, base: Pick<RoomPublicC
     offer: null,
     melds: [],
     roundWinner: null,
-    ...roundView(server),
+    ...roundView(server, deadlines.windowEndsAt),
     log: server.log,
     scores,
     totals,
@@ -197,7 +195,7 @@ export function publicView(server: RoomServerOnlyContext, base: Pick<RoomPublicC
   };
 }
 
-function standingsBySeat(server: RoomServerOnlyContext): number[] {
+function standingsBySeat(server: RoomShared): number[] {
   const table = server.sheet ? standings(server.sheet) : [];
   return server.seats.map((s) => table.find((t) => t.id === s.id)?.total ?? 0);
 }
@@ -207,7 +205,7 @@ const isTurnOf = (r: RoundState | null, id: string): boolean =>
   r !== null && r.phase.kind !== "out" && r.seats[r.turn]?.id === id;
 const hasAskedToBuy = (r: RoundState | null, id: string): boolean => r !== null && requestsOf(r.phase).includes(id);
 
-export function playerView(server: RoomServerOnlyContext, seat: number): PlayerView {
+export function playerView(server: RoomShared, seat: number): PlayerView {
   const id = server.seats[seat]?.id ?? "";
   const r = server.round;
   return {
@@ -220,14 +218,4 @@ export function playerView(server: RoomServerOnlyContext, seat: number): PlayerV
     mustCut: server.cutter === seat,
     oops: server.oops[id] ?? null,
   };
-}
-
-/** Rebuilds the public context and every caller's private slot from server-only state. Run after every mutation. */
-export function withViews(context: RoomServerContext): RoomServerContext {
-  const { server } = context;
-  const views: Record<string, RoomPrivateContext> = { [server.tvId]: { role: "tv" } };
-  server.seats.forEach((s, i) => {
-    views[s.id] = { role: "player", player: playerView(server, i) };
-  });
-  return { ...context, public: publicView(server, context.public), private: views };
 }

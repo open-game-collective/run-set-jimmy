@@ -7,7 +7,5 @@ export default defineConfig({
     fileParallelism: false,
     // The OGS key set the dev server checks game tokens against (e2e/ogs-jwks.ts).
     globalSetup: ["e2e/ogs-jwks.global-setup.ts"],
-    // actor-kit's browser build imports named exports from CJS fast-json-patch; let Vite handle the interop.
-    server: { deps: { inline: ["actor-kit"] } },
   },
 });

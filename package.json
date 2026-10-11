@@ -12,7 +12,8 @@
     "deploy": "wrangler deploy",
     "record": "tsx e2e/record-game.ts",
     "dev:seam": "wrangler dev --port 8798 --persist-to .wrangler/seam-state --var OGS_JWKS_URL:http://localhost:8837/.well-known/jwks.json",
-    "devices": "tsx e2e/devices.ts"
+    "devices": "tsx e2e/devices.ts",
+    "test:fuzz": "vitest run --config vitest.fuzz.config.ts"
   },
   "dependencies": {
     "@actor-kit/client": "file:vendor/actor-kit-client-0.2.0-a384ecd.tgz",

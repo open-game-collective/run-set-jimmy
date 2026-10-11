@@ -6,12 +6,12 @@
  * caller sees is the view the room sends that caller, parsed back like the client parses it.
  */
 import { simulate, type AnyContract, type SimActor, type Simulation } from "@actor-kit/test";
-import { z } from "zod";
 import { botMove, wantsBuy } from "../game/bot";
 import type { RoundState } from "../game/round";
 import { BUY_WINDOW_MS, RoomContract, type RoomState } from "../room";
 import type { OgsClaim, RoomClientEvent, RoomPrivateContext, RoomPublicContext, RoomShared, RoomStateValue } from "../room.types";
 import { fromWire } from "../room.wire";
+import { roomState } from "./room-state";
 
 export const TV = "tv-1";
 export const PLAYERS = ["ann-1", "ben-1", "cat-1", "dan-1"] as const;
@@ -63,21 +63,7 @@ export function claim(room: TestRoom, callerId: string, c: OgsClaim): void {
   room.sim.send(ROOM, ROOM_CODE, "ogs", { type: "OGS_CLAIM", callerId, claim: c }, { callerType: "service" });
 }
 
-/**
- * The room's persisted state. simulate() types `state` as what init returns, but an actor with
- * states persists `{ shared, phase, local, stateTimers }` (docs/actor-kit-v2-feedback.md): checked here.
- */
-const RoomStateZ = z.custom<RoomState>(
-  (x) =>
-    z
-      .object({
-        shared: z.object({ seats: z.array(z.unknown()) }),
-        phase: z.enum(["lobby", "cutting", "window", "acting", "roundOver", "gameOver"]),
-        stateTimers: z.array(z.string()),
-      })
-      .safeParse(x).success,
-);
-export const state = (room: TestRoom): RoomState => RoomStateZ.parse(room.actor.state);
+export const state = (room: TestRoom): RoomState => roomState(room.actor.state);
 
 const valueOf = (phase: RoomState["phase"]): RoomStateValue => (phase === "window" || phase === "acting" ? { playing: phase } : phase);
 

@@ -2,16 +2,17 @@
  * The room actor (actor-kit v0.3). Browser-safe: imports @actor-kit/worker/testing, not
  * cloudflare:workers, so tests share the contract (the client only needs src/room.views.ts).
  *
- * States: lobby → cutting → playing { window ⇄ acting } → roundOver → … → gameOver. `playing`
- * holds the round number in its local, which lasts while the buy window and the players' turns
- * alternate; the round itself stays in shared state (actor-kit 0.3 cannot change a kept parent's
- * local in the transition that switches its child: docs/actor-kit-v2-feedback.md).
+ * States: lobby → cutting → playing { window ⇄ acting } → roundOver → … → gameOver. The round lives
+ * in `playing`'s local: every move updates it there, and it lasts while the buy window and the
+ * players' turns alternate. Between rounds the one just finished stays in shared state for the
+ * scores. The rules work on the table: shared state plus the round wherever it lives
+ * (src/room.views.ts: atRest/rested between rounds, inPlay/played during play).
  *
  * Every timer is a durable timer scoped to its state (cut timeout, buy window, AI pauses): it
  * survives eviction and deploys and is cancelled when the state ends. Deadlines the screens count
  * down to live in the state's local.
  */
-import { setup, type Goto, type PhaseResult, type PhasedStateOf, type TypedEmit } from "@actor-kit/worker/testing";
+import { setup, type PhasedStateOf, type TypedEmit } from "@actor-kit/worker/testing";
 import { z } from "zod";
 import { standings, winners } from "./game/game";
 import {
@@ -45,8 +46,9 @@ import {
   type PlayerMove,
 } from "./room.rules";
 import { OgsClaimPayload, Payloads, RoomInputSchema } from "./room.schemas";
-import type { RoomShared } from "./room.types";
-import { roomRoles, roomViews } from "./room.views";
+import type { RoundState } from "./game/round";
+import type { RoomShared, RoomTable } from "./room.types";
+import { atRest, inPlay, played, rested, roomRoles, roomViews } from "./room.views";
 
 export { MAX_SEATS, AI_NAMES } from "./room.rules";
 
@@ -71,11 +73,17 @@ const EVENTS = {
 };
 
 const Deadline = z.number();
+/** The round in playing's local: the engine's own state (src/game/round.ts), checked for its shape. */
+const RoundZ = z.custom<RoundState>(
+  (x) => typeof x === "object" && x !== null && Array.isArray(Reflect.get(x, "seats")) && Array.isArray(Reflect.get(x, "deck")),
+  "the round in playing's local",
+);
 const STATES = {
   lobby: {},
   cutting: { local: z.object({ endsAt: Deadline, aiActAt: Deadline.nullable() }) },
   playing: {
-    local: z.object({ round: z.number() }),
+    local: z.object({ round: RoundZ }),
+    input: z.object({ round: RoundZ }),
     states: {
       window: { local: z.object({ endsAt: Deadline, aiActAt: Deadline.nullable() }) },
       acting: { local: z.object({ aiActAt: Deadline.nullable() }) },
@@ -90,15 +98,7 @@ const kit = setup({ events: EVENTS, states: STATES });
 export type RoomState = PhasedStateOf<typeof kit, RoomShared>;
 type RoomEvents = { [K in keyof typeof EVENTS]: z.output<(typeof EVENTS)[K]> };
 
-/** What settling a move needs from a handler's context. */
-type Settler = {
-  readonly phase: readonly string[];
-  readonly goto: Goto<typeof STATES, RoomShared>;
-  reenter(shared: RoomShared): PhaseResult<RoomShared>;
-  readonly emit: TypedEmit<RoomEvents>;
-};
-
-const seatsWhere = (before: RoomShared, after: RoomShared, changed: (was: { down: boolean; buys: number }, now: { down: boolean; buys: number }) => boolean): number[] => {
+const seatsWhere = (before: RoomTable, after: RoomTable, changed: (was: { down: boolean; buys: number }, now: { down: boolean; buys: number }) => boolean): number[] => {
   const was = before.round;
   const now = after.round;
   if (!was || !now || was.round !== now.round) return [];
@@ -109,14 +109,14 @@ const seatsWhere = (before: RoomShared, after: RoomShared, changed: (was: { down
 };
 
 /** The domain events a move made: who went down, who bought. */
-function emitMoveEvents(before: RoomShared, after: RoomShared, emit: TypedEmit<RoomEvents>): void {
+function emitMoveEvents(before: RoomTable, after: RoomTable, emit: TypedEmit<RoomEvents>): void {
   const round = after.roundNumber;
   for (const seat of seatsWhere(before, after, (was, now) => !was.down && now.down)) emit("WentDown", { seat, round });
   for (const seat of seatsWhere(before, after, (was, now) => now.buys > was.buys)) emit("Bought", { seat, round });
 }
 
 /** Scores the finished round onto the sheet (entering roundOver or gameOver). */
-function scoreRound(shared: RoomShared, emit: TypedEmit<RoomEvents>): RoomShared {
+function scoreRound(shared: RoomTable, emit: TypedEmit<RoomEvents>): RoomTable {
   const { shared: scored, points } = recordRound(shared);
   const r = shared.round;
   const winner = r && r.phase.kind === "out" ? seatOf(shared, r.phase.winner) : -1;
@@ -124,7 +124,7 @@ function scoreRound(shared: RoomShared, emit: TypedEmit<RoomEvents>): RoomShared
   return scored;
 }
 
-function gameOverEvent(shared: RoomShared, emit: TypedEmit<RoomEvents>): void {
+function gameOverEvent(shared: RoomTable, emit: TypedEmit<RoomEvents>): void {
   const sheet = shared.sheet;
   const table = sheet ? standings(sheet) : [];
   emit("GameOver", {
@@ -134,18 +134,25 @@ function gameOverEvent(shared: RoomShared, emit: TypedEmit<RoomEvents>): void {
   });
 }
 
+/** Where a change to the round takes the room; each handler carries it out with its own ctx. */
+type Plan =
+  | { kind: "over"; to: "roundOver" | "gameOver"; shared: RoomShared }
+  | { kind: "stay"; shared: RoomShared; round: RoundState }
+  | { kind: "rearm"; shared: RoomShared; round: RoundState }
+  | { kind: "switch"; to: "window" | "acting"; shared: RoomShared; round: RoundState };
+
 /**
- * After a change to the round: the state it puts the room in. Someone out → the round is scored
- * (roundOver, or gameOver after the seventh); a buy window open → playing.window; otherwise
- * playing.acting. Staying in the same state keeps its timers, unless `rearm` (an AI move re-enters,
- * re-arming the pause before the next one).
+ * After a change to the round: someone out → the round is scored (roundOver, or gameOver after the
+ * seventh); a buy window open → playing.window; otherwise playing.acting. Staying in the same state
+ * keeps its timers, unless `rearm` (an AI move re-enters, re-arming the pause before the next one).
  */
-function settle(before: RoomShared, shared: RoomShared, ctx: Settler, rearm = false): PhaseResult<RoomShared> {
-  emitMoveEvents(before, shared, ctx.emit);
-  if (roundOut(shared)) return ctx.goto(lastRound(shared) ? "gameOver" : "roundOver", shared);
-  const target = windowOpen(shared) ? "window" : "acting";
-  if (ctx.phase[0] === "playing" && ctx.phase[1] === target) return rearm ? ctx.reenter(shared) : shared;
-  return ctx.goto(["playing", target], shared);
+function settle(before: RoomTable, after: RoomTable, leaf: string | undefined, emit: TypedEmit<RoomEvents>, rearm = false): Plan {
+  emitMoveEvents(before, after, emit);
+  const round = after.round;
+  if (round === null || roundOut(after)) return { kind: "over", to: lastRound(after) ? "gameOver" : "roundOver", shared: rested(after) };
+  const target = windowOpen(after) ? "window" : "acting";
+  if (leaf !== target) return { kind: "switch", to: target, shared: played(after), round };
+  return { kind: rearm ? "rearm" : "stay", shared: played(after), round };
 }
 
 /** A 32-bit shuffle seed from the room's recorded randomness. */
@@ -159,75 +166,107 @@ const acting = kit.in(["playing", "acting"]);
 const roundOver = kit.in("roundOver");
 const gameOver = kit.in("gameOver");
 
-/** A seated player's move during the round (in the buy window or a turn alike). */
+/** A seated player's move during the round (in the buy window or a turn alike), at playing's level. */
 const move = <P>(payload: z.ZodType<P>, toMove: (p: P) => PlayerMove) =>
   playing.message(payload, {
     roles: ["player"],
     handler: (s: RoomShared, p, ctx) => {
-      const out = act(s, ctx.caller, toMove(p));
-      return out.accepted ? settle(s, out.shared, ctx) : out.shared;
+      const table = inPlay(s, ctx.local.round);
+      const out = act(table, ctx.caller, toMove(p));
+      if (!out.accepted) return ctx.stay(played(out.shared), { round: ctx.local.round });
+      const plan = settle(table, out.shared, ctx.phase[1], ctx.emit);
+      if (plan.kind === "over") return ctx.goto(plan.to, plan.shared);
+      if (plan.kind === "switch") return ctx.goto(["playing", plan.to], plan.shared, undefined, { locals: { playing: { round: plan.round } } });
+      return ctx.stay(plan.shared, { round: plan.round });
     },
   });
 
+/** After the deal (the cutter's tap or the room's own cut): play starts in the first discard's buy window. */
+function deal(s: RoomShared, at: number, seed: number) {
+  const dealt = dealRound(atRest(s), at, seed);
+  return { shared: played(dealt), round: dealt.round };
+}
+
 const Empty = z.object({}).optional();
+
+/** A change between rounds, on the table (the round just finished, or none). */
+const rest = (s: RoomShared, change: (t: RoomTable) => RoomTable): RoomShared => rested(change(atRest(s)));
 
 export const RoomContract = kit.actor("room", {
   input: RoomInputSchema,
   init: (input: z.output<typeof RoomInputSchema>): RoomShared => newRoom(input.code, input.tvId),
   initial: "lobby",
   roles: roomRoles,
-  // Accepted in every state.
+  // Accepted in every state. Neither touches the round (rest() keeps the shared state's as it was).
   messages: {
-    OGS_CLAIM: kit.message(OgsClaimPayload, { roles: ["service"], handler: (s: RoomShared, { callerId, claim }) => applyClaim(s, callerId, claim) }),
-    AWAY: kit.message(Payloads.AWAY, (s: RoomShared, { away }, ctx) => setAway(s, ctx.caller, away)),
+    OGS_CLAIM: kit.message(OgsClaimPayload, {
+      roles: ["service"],
+      handler: (s: RoomShared, { callerId, claim }) => rest(s, (t) => applyClaim(t, callerId, claim)),
+    }),
+    AWAY: kit.message(Payloads.AWAY, (s: RoomShared, { away }, ctx) => rest(s, (t) => setAway(t, ctx.caller, away))),
   },
   states: {
     lobby: lobby.state({
       messages: {
-        JOIN: lobby.message(Payloads.JOIN, { roles: ["guest"], handler: (s: RoomShared, { name }, ctx) => join(s, ctx.caller, name) }),
+        JOIN: lobby.message(Payloads.JOIN, { roles: ["guest"], handler: (s: RoomShared, { name }, ctx) => rest(s, (t) => join(t, ctx.caller, name)) }),
         START: lobby.message(Payloads.START, {
           roles: ["player"],
-          guard: (s: RoomShared, _p, ctx) => canStart(s, ctx.caller),
-          handler: (s: RoomShared, _p, ctx) => ctx.goto("cutting", newGame(s)),
+          guard: (s: RoomShared, _p, ctx) => canStart(atRest(s), ctx.caller),
+          handler: (s: RoomShared, _p, ctx) => ctx.goto("cutting", rest(s, newGame)),
         }),
-        ADD_AI: lobby.message(Payloads.ADD_AI, { roles: ["player"], guard: (s: RoomShared, _p, ctx) => isHost(s, ctx.caller), handler: (s: RoomShared) => addAi(s) }),
+        ADD_AI: lobby.message(Payloads.ADD_AI, {
+          roles: ["player"],
+          guard: (s: RoomShared, _p, ctx) => isHost(atRest(s), ctx.caller),
+          handler: (s: RoomShared) => rest(s, addAi),
+        }),
         MOVE_SEAT: lobby.message(Payloads.MOVE_SEAT, {
           roles: ["player"],
-          guard: (s: RoomShared, _p, ctx) => isHost(s, ctx.caller),
-          handler: (s: RoomShared, { seat, to }) => moveSeat(s, seat, to),
+          guard: (s: RoomShared, _p, ctx) => isHost(atRest(s), ctx.caller),
+          handler: (s: RoomShared, { seat, to }) => rest(s, (t) => moveSeat(t, seat, to)),
         }),
         REMOVE_SEAT: lobby.message(Payloads.REMOVE_SEAT, {
           roles: ["player"],
-          guard: (s: RoomShared, _p, ctx) => isHost(s, ctx.caller),
-          handler: (s: RoomShared, { seat }) => removeSeat(s, seat),
+          guard: (s: RoomShared, _p, ctx) => isHost(atRest(s), ctx.caller),
+          handler: (s: RoomShared, { seat }) => rest(s, (t) => removeSeat(t, seat)),
         }),
       },
     }),
     cutting: cutting.state({
       // The seat right of the dealer cuts; the room cuts for them after a while (or at once, for an AI).
       enter: (s: RoomShared, _input, ctx) => {
-        const shared = setCutter(s);
+        const shared = rest(s, setCutter);
         ctx.schedule("cutTimeout", { in: CUT_TIMEOUT_MS, scope: "state" });
-        const ai = cutterIsAi(shared);
+        const ai = cutterIsAi(atRest(shared));
         if (ai) ctx.schedule("aiCut", { in: AI_THINK_MS, scope: "state" });
         return ctx.stay(shared, { endsAt: ctx.now() + CUT_TIMEOUT_MS, aiActAt: ai ? ctx.now() + AI_THINK_MS : null });
       },
       messages: {
         CUT: cutting.message(Payloads.CUT, {
           roles: ["player"],
-          guard: (s: RoomShared, _p, ctx) => isCutter(s, ctx.caller),
-          handler: (s: RoomShared, { at }, ctx) => settle(s, dealRound(s, at, seedFrom(ctx.random)), ctx),
+          guard: (s: RoomShared, _p, ctx) => isCutter(atRest(s), ctx.caller),
+          handler: (s: RoomShared, { at }, ctx) => {
+            const d = deal(s, at, seedFrom(ctx.random));
+            return d.round ? ctx.goto("playing", d.shared, { round: d.round }) : s;
+          },
         }),
       },
       timers: {
         // Nobody tapped the deck: the room cuts for the cutter.
-        cutTimeout: cutting.timer(Empty, (s: RoomShared, _p, ctx) => settle(s, dealRound(s, ctx.random(), seedFrom(ctx.random)), ctx)),
-        aiCut: cutting.timer(Empty, (s: RoomShared, _p, ctx) => (cutterIsAi(s) ? settle(s, dealRound(s, ctx.random(), seedFrom(ctx.random)), ctx) : s)),
+        cutTimeout: cutting.timer(Empty, (s: RoomShared, _p, ctx) => {
+          const d = deal(s, ctx.random(), seedFrom(ctx.random));
+          return d.round ? ctx.goto("playing", d.shared, { round: d.round }) : s;
+        }),
+        aiCut: cutting.timer(Empty, (s: RoomShared, _p, ctx) => {
+          if (!cutterIsAi(atRest(s))) return s;
+          const d = deal(s, ctx.random(), seedFrom(ctx.random));
+          return d.round ? ctx.goto("playing", d.shared, { round: d.round }) : s;
+        }),
       },
     }),
     playing: playing.state({
       initial: "window",
-      enter: (s: RoomShared) => ({ round: s.roundNumber }),
+      // The dealt round: every move changes it here, and it lasts while window and acting alternate.
+      enter: (_s: RoomShared, { round }) => ({ round }),
       messages: {
         DRAW: move(Payloads.DRAW, ({ from }) => ({ type: "DRAW", from })),
         BUY: move(Payloads.BUY, () => ({ type: "BUY" })),
@@ -239,58 +278,81 @@ export const RoomContract = kit.actor("room", {
       states: {
         window: windowPhase.state({
           enter: (s: RoomShared, _input, ctx) => {
+            const table = inPlay(s, ctx.local.round);
             ctx.schedule("buyWindow", { in: BUY_WINDOW_MS, scope: "state" });
             // The AI on turn takes the discard it wants; AI players not on turn may ask to buy it.
-            const ai = aiTurn(s) !== null;
+            const ai = aiTurn(table) !== null;
             if (ai) ctx.schedule("aiThink", { in: AI_THINK_MS, scope: "state" });
-            if (aiMightBuy(s)) ctx.schedule("aiBuy", { in: AI_BUY_MS, scope: "state" });
+            if (aiMightBuy(table)) ctx.schedule("aiBuy", { in: AI_BUY_MS, scope: "state" });
             return { endsAt: ctx.now() + BUY_WINDOW_MS, aiActAt: ai ? ctx.now() + AI_THINK_MS : null };
           },
           timers: {
-            buyWindow: windowPhase.timer(Empty, (s: RoomShared, _p, ctx) => settle(s, closeWindow(s), ctx)),
-            aiThink: windowPhase.timer(Empty, (s: RoomShared, _p, ctx) => {
-              const out = aiAct(s);
-              return out.accepted ? settle(s, out.shared, ctx) : s;
+            buyWindow: windowPhase.timer(Empty, (s: RoomShared, _p, ctx) => {
+              const table = inPlay(s, ctx.local.round);
+              const plan = settle(table, closeWindow(table), "window", ctx.emit);
+              if (plan.kind === "over") return ctx.goto(plan.to, plan.shared);
+              if (plan.kind === "switch") return ctx.goto(["playing", plan.to], plan.shared, undefined, { locals: { playing: { round: plan.round } } });
+              return ctx.stay(plan.shared, { ...ctx.local, round: plan.round });
             }),
-            aiBuy: windowPhase.timer(Empty, (s: RoomShared) => (aiBuyers(s).length > 0 ? aiBuy(s) : s)),
+            aiThink: windowPhase.timer(Empty, (s: RoomShared, _p, ctx) => {
+              const table = inPlay(s, ctx.local.round);
+              const out = aiAct(table);
+              if (!out.accepted) return s;
+              const plan = settle(table, out.shared, "window", ctx.emit);
+              if (plan.kind === "over") return ctx.goto(plan.to, plan.shared);
+              if (plan.kind === "switch") return ctx.goto(["playing", plan.to], plan.shared, undefined, { locals: { playing: { round: plan.round } } });
+              return ctx.stay(plan.shared, { ...ctx.local, round: plan.round });
+            }),
+            aiBuy: windowPhase.timer(Empty, (s: RoomShared, _p, ctx) => {
+              const table = inPlay(s, ctx.local.round);
+              if (aiBuyers(table).length === 0) return s;
+              const next = aiBuy(table);
+              return next.round ? ctx.stay(played(next), { ...ctx.local, round: next.round }) : s;
+            }),
           },
         }),
         acting: acting.state({
           enter: (s: RoomShared, _input, ctx) => {
-            const ai = aiTurn(s) !== null;
+            const ai = aiTurn(inPlay(s, ctx.local.round)) !== null;
             if (ai) ctx.schedule("aiThink", { in: AI_THINK_MS, scope: "state" });
             return { aiActAt: ai ? ctx.now() + AI_THINK_MS : null };
           },
           timers: {
             aiThink: acting.timer(Empty, (s: RoomShared, _p, ctx) => {
-              const out = aiAct(s);
-              return out.accepted ? settle(s, out.shared, ctx, true) : s;
+              const table = inPlay(s, ctx.local.round);
+              const out = aiAct(table);
+              if (!out.accepted) return s;
+              const plan = settle(table, out.shared, "acting", ctx.emit, true);
+              if (plan.kind === "over") return ctx.goto(plan.to, plan.shared);
+              if (plan.kind === "switch") return ctx.goto(["playing", plan.to], plan.shared, undefined, { locals: { playing: { round: plan.round } } });
+              if (plan.kind === "rearm") return ctx.reenter(plan.shared, undefined, { locals: { playing: { round: plan.round } } });
+              return ctx.stay(plan.shared, { ...ctx.local, round: plan.round });
             }),
           },
         }),
       },
     }),
     roundOver: roundOver.state({
-      enter: (s: RoomShared, _input, ctx) => ctx.stay(scoreRound(s, ctx.emit)),
+      enter: (s: RoomShared, _input, ctx) => ctx.stay(rest(s, (t) => scoreRound(t, ctx.emit))),
       messages: {
         NEXT_ROUND: roundOver.message(Payloads.NEXT_ROUND, {
           roles: ["player"],
-          guard: (s: RoomShared, _p, ctx) => isHost(s, ctx.caller),
-          handler: (s: RoomShared, _p, ctx) => ctx.goto("cutting", nextRound(s)),
+          guard: (s: RoomShared, _p, ctx) => isHost(atRest(s), ctx.caller),
+          handler: (s: RoomShared, _p, ctx) => ctx.goto("cutting", rest(s, nextRound)),
         }),
       },
     }),
     gameOver: gameOver.state({
       enter: (s: RoomShared, _input, ctx) => {
-        const scored = scoreRound(s, ctx.emit);
+        const scored = scoreRound(atRest(s), ctx.emit);
         gameOverEvent(scored, ctx.emit);
-        return ctx.stay(scored);
+        return ctx.stay(rested(scored));
       },
       messages: {
         NEW_GAME: gameOver.message(Payloads.NEW_GAME, {
           roles: ["player"],
-          guard: (s: RoomShared, _p, ctx) => isHost(s, ctx.caller),
-          handler: (s: RoomShared, _p, ctx) => ctx.goto("cutting", newGame(s)),
+          guard: (s: RoomShared, _p, ctx) => isHost(atRest(s), ctx.caller),
+          handler: (s: RoomShared, _p, ctx) => ctx.goto("cutting", rest(s, newGame)),
         }),
       },
     }),

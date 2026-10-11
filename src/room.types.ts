@@ -26,10 +26,11 @@ export type Couch = { sid: string; label: string; away: boolean };
 export type LogEntry = RoomPublicContext["log"][number];
 
 /**
- * The room's state, shared by every phase. Never sent to any client: every hand and the deck live
- * here; views (src/views.ts) project what each caller may see.
+ * The table: the room's state with the round being played (or the last one, between rounds). The
+ * rules (src/room.rules.ts) and views (src/views.ts) work on it. Never sent to any client: every
+ * hand and the deck live here; views project what each caller may see.
  */
-export type RoomShared = {
+export type RoomTable = {
   /** The first TV (the room's creator). Other households' TVs are viewers too. */
   tvId: string;
   roomCode: string;
@@ -51,6 +52,12 @@ export type RoomShared = {
   /** Seat index that cuts before this round's deal (while cutting). */
   cutter: number | null;
 };
+
+/**
+ * The room's shared state (every state sees it). During play the round lives in `playing`'s local
+ * (src/room.ts); between rounds the one just finished stays here for the scores.
+ */
+export type RoomShared = Omit<RoomTable, "round"> & { finished: RoundState | null };
 
 /**
  * When the room acts next by itself (ms since epoch), for the screens' countdowns. These live in

@@ -570,19 +570,38 @@ describe("who may send what (roles on messages)", () => {
   });
 });
 
-describe("states (playing keeps its local while the window and the turns alternate)", () => {
-  it("playing's local is the round being played, through every window ⇄ acting switch of a round", () => {
+describe("states (playing keeps the round in its local while the window and the turns alternate)", () => {
+  it("the round lives in playing's local: every move changes it there, through every window ⇄ acting switch", () => {
     const room = startedRoom();
     let switches = 0;
     let leaf = value(room);
     for (let i = 0; i < 20_000 && value(room).startsWith("playing"); i++) {
-      expect(state(room).locals[0]).toEqual({ round: 1 });
+      const st = state(room);
+      expect("round" in st.shared).toBe(false);
+      const local = st.locals[0];
+      expect(local).toEqual({ round: expect.objectContaining({ round: 1 }) });
+      // What each phone holds is the hand in playing's local.
+      for (const id of [ANN, BEN]) {
+        const seat = (local && typeof local === "object" && "round" in local ? local.round : null)?.seats.find((x) => x.id === id);
+        expect(view(room, id).player?.hand).toEqual(seat?.hand);
+      }
       botStep(room);
       if (value(room) !== leaf && value(room).startsWith("playing")) switches++;
       leaf = value(room);
     }
     expect(value(room)).toBe("roundOver");
     expect(switches).toBeGreaterThan(4);
+  });
+
+  it("the finished round stays on show between rounds, and is gone once the next cut starts", () => {
+    const room = startedRoom();
+    playOutRound(room);
+    expect(pub(room).roundWinner).not.toBeNull();
+    expect(pub(room).melds.length).toBeGreaterThan(0);
+    send(room, ANN, { type: "NEXT_ROUND" });
+    expect(value(room)).toBe("cutting");
+    expect(pub(room).melds).toEqual([]);
+    expect(pub(room).roundWinner).toBeNull();
   });
 });
 

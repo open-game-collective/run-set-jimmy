@@ -26,7 +26,7 @@ import {
   type TableMeld,
 } from "./game/round";
 import { cardName } from "./game/words";
-import type { OgsClaim, RoomShared, Seat } from "./room.types";
+import type { OgsClaim, RoomShared, RoomTable, Seat } from "./room.types";
 import { hostIndex } from "./views";
 
 export const MAX_SEATS = 7;
@@ -42,7 +42,7 @@ export function newRoom(roomCode: string, tvId: string): RoomShared {
     claims: {},
     couchOf: {},
     couches: [],
-    round: null,
+    finished: null,
     sheet: null,
     roundNumber: 0,
     gameNumber: 0,
@@ -54,34 +54,34 @@ export function newRoom(roomCode: string, tvId: string): RoomShared {
   };
 }
 
-const update = (shared: RoomShared, recipe: (draft: Draft<RoomShared>) => void): RoomShared => produce(shared, recipe);
+const update = (shared: RoomTable, recipe: (draft: Draft<RoomTable>) => void): RoomTable => produce(shared, recipe);
 
-export const seatOf = (shared: RoomShared, callerId: string): number => shared.seats.findIndex((s) => s.id === callerId);
-const nameOf = (shared: RoomShared, id: string) => shared.seats.find((s) => s.id === id)?.name ?? "Someone";
+export const seatOf = (shared: { readonly seats: readonly Seat[] }, callerId: string): number => shared.seats.findIndex((s) => s.id === callerId);
+const nameOf = (shared: RoomTable, id: string) => shared.seats.find((s) => s.id === id)?.name ?? "Someone";
 
-function log(d: Draft<RoomShared>, seat: number | null, kind: string, text: string): void {
+function log(d: Draft<RoomTable>, seat: number | null, kind: string, text: string): void {
   d.seq += 1;
   d.log.push({ seq: d.seq, seat, kind, text });
   if (d.log.length > LOG_LENGTH) d.log.splice(0, d.log.length - LOG_LENGTH);
 }
 
-export const isHost = (shared: RoomShared, callerId: string): boolean => {
+export const isHost = (shared: RoomTable, callerId: string): boolean => {
   const seat = seatOf(shared, callerId);
   return seat >= 0 && seat === hostIndex(shared);
 };
 
-export const canStart = (shared: RoomShared, callerId: string): boolean => isHost(shared, callerId) && shared.seats.length >= MIN_PLAYERS;
+export const canStart = (shared: RoomTable, callerId: string): boolean => isHost(shared, callerId) && shared.seats.length >= MIN_PLAYERS;
 
-export const isCutter = (shared: RoomShared, callerId: string): boolean => shared.cutter !== null && seatOf(shared, callerId) === shared.cutter;
+export const isCutter = (shared: RoomTable, callerId: string): boolean => shared.cutter !== null && seatOf(shared, callerId) === shared.cutter;
 
-export const lastRound = (shared: RoomShared): boolean => shared.roundNumber >= ROUNDS;
+export const lastRound = (shared: RoomTable): boolean => shared.roundNumber >= ROUNDS;
 
 /** What the phone asked to be called (trimmed to 16), else "Player N". */
-const baseName = (shared: RoomShared, wanted: string | undefined): string =>
+const baseName = (shared: RoomTable, wanted: string | undefined): string =>
   wanted && wanted.length > 0 ? wanted.slice(0, 16) : `Player ${shared.seats.length + 1}`;
 
 /** A unique seat name: the verified OGS name, else what the phone typed, else "Player N". */
-function seatName(shared: RoomShared, wanted: string | undefined): string {
+function seatName(shared: RoomTable, wanted: string | undefined): string {
   const base = baseName(shared, wanted);
   const taken = new Set(shared.seats.map((s) => s.name));
   if (!taken.has(base)) return base;
@@ -91,7 +91,7 @@ function seatName(shared: RoomShared, wanted: string | undefined): string {
 // --- Moves ---
 
 /** A player's move, with who made it and what the table looked like before it. */
-type Mover = { shared: RoomShared; r: RoundState; id: string; seat: number; name: string; top: string };
+type Mover = { shared: RoomTable; r: RoundState; id: string; seat: number; name: string; top: string };
 /** A log line: [kind, text]. */
 type LogLine = [string, string];
 type Move = { result: Result; line: (next: RoundState) => LogLine };
@@ -112,12 +112,12 @@ const topName = (r: RoundState): string => {
 const cardLabel = (card: Card | undefined): string => (card ? cardName(card) : "card");
 const handCard = (r: RoundState, cardId: string): Card | undefined => r.seats[r.turn]?.hand.find((c) => c.id === cardId);
 
-function moverFor(shared: RoomShared, r: RoundState, id: string): Mover {
+function moverFor(shared: RoomTable, r: RoundState, id: string): Mover {
   return { shared, r, id, seat: seatOf(shared, id), name: nameOf(shared, id), top: topName(r) };
 }
 
 /** The seated caller making a move during a round; null for anyone else, or between rounds. */
-function moverOf(shared: RoomShared, callerId: string): Mover | null {
+function moverOf(shared: RoomTable, callerId: string): Mover | null {
   const r = shared.round;
   if (!r || seatOf(shared, callerId) < 0) return null;
   return moverFor(shared, r, callerId);
@@ -192,7 +192,7 @@ function playerMove(m: Mover, move: PlayerMove): Move {
 }
 
 /** The rules said no: tell only that phone why. */
-function refuse(shared: RoomShared, id: string, reason: string): RoomShared {
+function refuse(shared: RoomTable, id: string, reason: string): RoomTable {
   return update(shared, (d) => {
     d.seq += 1;
     d.oops[id] = { line: reason, seq: d.seq };
@@ -200,7 +200,7 @@ function refuse(shared: RoomShared, id: string, reason: string): RoomShared {
 }
 
 /** The move stands: the round moves on, the phone's last refusal clears, and the table log says what happened. */
-function accept(shared: RoomShared, m: Mover, next: RoundState, entry: LogLine): RoomShared {
+function accept(shared: RoomTable, m: Mover, next: RoundState, entry: LogLine): RoomTable {
   return update(shared, (d) => {
     d.round = castDraft(next);
     delete d.oops[m.id];
@@ -210,10 +210,10 @@ function accept(shared: RoomShared, m: Mover, next: RoundState, entry: LogLine):
 }
 
 /** What a move did, for the room's domain events: who moved, and whether the rules let it stand. */
-export type MoveOutcome = { shared: RoomShared; accepted: boolean; seat: number };
+export type MoveOutcome = { shared: RoomTable; accepted: boolean; seat: number };
 
 /** Runs a player's move through the rules; a refusal goes back to that phone only. */
-export function act(shared: RoomShared, callerId: string, move: PlayerMove): MoveOutcome {
+export function act(shared: RoomTable, callerId: string, move: PlayerMove): MoveOutcome {
   const m = moverOf(shared, callerId);
   if (!m) return { shared, accepted: false, seat: -1 };
   const { result, line } = playerMove(m, move);
@@ -223,7 +223,7 @@ export function act(shared: RoomShared, callerId: string, move: PlayerMove): Mov
 
 // --- The cut and the deal ---
 
-export function setCutter(shared: RoomShared): RoomShared {
+export function setCutter(shared: RoomTable): RoomTable {
   const n = shared.seats.length;
   const dealer = dealerFor(shared.roundNumber, n);
   return update(shared, (d) => {
@@ -232,7 +232,7 @@ export function setCutter(shared: RoomShared): RoomShared {
 }
 
 /** Deals the round, cut `at` (0–1) along the shoe; `seed` shuffles it (from the room's ctx.random()). */
-export function dealRound(shared: RoomShared, at: number, seed: number): RoomShared {
+export function dealRound(shared: RoomTable, at: number, seed: number): RoomTable {
   const seatIds = shared.seats.map((s) => s.id);
   const shoeSize = decksFor(seatIds.length) * 54;
   const r = deal({
@@ -257,7 +257,7 @@ export function dealRound(shared: RoomShared, at: number, seed: number): RoomSha
   });
 }
 
-export function newGame(shared: RoomShared): RoomShared {
+export function newGame(shared: RoomTable): RoomTable {
   return update(shared, (d) => {
     d.sheet = newScoreSheet(shared.seats.map((s) => s.id));
     d.roundNumber = 1;
@@ -267,7 +267,7 @@ export function newGame(shared: RoomShared): RoomShared {
   });
 }
 
-export function nextRound(shared: RoomShared): RoomShared {
+export function nextRound(shared: RoomTable): RoomTable {
   return update(shared, (d) => {
     d.roundNumber += 1;
     d.round = null;
@@ -276,7 +276,7 @@ export function nextRound(shared: RoomShared): RoomShared {
 }
 
 /** The buy window's time is up: an offer to the turn player, or on to their draw. */
-export function closeWindow(shared: RoomShared): RoomShared {
+export function closeWindow(shared: RoomTable): RoomTable {
   const r = shared.round;
   if (!r) return shared;
   const closed = closeBuyWindow(r);
@@ -287,7 +287,7 @@ export function closeWindow(shared: RoomShared): RoomShared {
 }
 
 /** Adds the finished round's points to the score sheet; returns them by seat too. */
-export function recordRound(shared: RoomShared): { shared: RoomShared; points: number[] } {
+export function recordRound(shared: RoomTable): { shared: RoomTable; points: number[] } {
   const r = shared.round;
   const sheet = shared.sheet;
   if (!r || !sheet) return { shared, points: [] };
@@ -300,23 +300,23 @@ export function recordRound(shared: RoomShared): { shared: RoomShared; points: n
   };
 }
 
-export const roundOut = (shared: RoomShared): boolean => shared.round?.phase.kind === "out";
-export const windowOpen = (shared: RoomShared): boolean => shared.round !== null && windowIsOpen(shared.round.phase);
+export const roundOut = (shared: RoomTable): boolean => shared.round?.phase.kind === "out";
+export const windowOpen = (shared: RoomTable): boolean => shared.round !== null && windowIsOpen(shared.round.phase);
 
 // --- Seats ---
 
 /** A caller who may take a seat: a phone (not the TV), not already seated, while seats are left. */
-function canSeat(shared: RoomShared, id: string): boolean {
+function canSeat(shared: RoomTable, id: string): boolean {
   return id !== shared.tvId && !shared.seats.some((s) => s.id === id) && shared.seats.length < MAX_SEATS;
 }
 
 /** A new seat, named and pictured by the caller's verified OGS claim when there is one. */
-function newSeat(shared: RoomShared, id: string, typed: string | undefined): Seat {
+function newSeat(shared: RoomTable, id: string, typed: string | undefined): Seat {
   const claim = shared.claims[id];
   return { id, name: seatName(shared, claim?.name ?? typed), avatar: claim?.avatar || null, ai: false };
 }
 
-export function join(shared: RoomShared, callerId: string, name: string | undefined): RoomShared {
+export function join(shared: RoomTable, callerId: string, name: string | undefined): RoomTable {
   if (!canSeat(shared, callerId)) return shared;
   const seat = newSeat(shared, callerId, name);
   return update(shared, (d) => {
@@ -325,7 +325,7 @@ export function join(shared: RoomShared, callerId: string, name: string | undefi
 }
 
 /** The next AI player: the first regular not yet at the table, with an id no phone can have. */
-function newAiSeat(shared: RoomShared): Seat {
+function newAiSeat(shared: RoomTable): Seat {
   const taken = new Set(shared.seats.map((s) => s.name));
   const ids = new Set(shared.seats.map((s) => s.id));
   let n = 1;
@@ -333,7 +333,7 @@ function newAiSeat(shared: RoomShared): Seat {
   return { id: `ai:${n}`, name: seatName(shared, AI_NAMES.find((x) => !taken.has(x)) ?? "Vera"), avatar: null, ai: true };
 }
 
-export function addAi(shared: RoomShared): RoomShared {
+export function addAi(shared: RoomTable): RoomTable {
   if (shared.seats.length >= MAX_SEATS) return shared;
   const seat = newAiSeat(shared);
   return update(shared, (d) => {
@@ -347,14 +347,14 @@ function moveIn<T>(list: T[], from: number, to: number): void {
   if (moved) list.splice(to, 0, moved);
 }
 
-const seatsExist = (shared: RoomShared, ...seats: number[]) => seats.every((s) => s < shared.seats.length);
+const seatsExist = (shared: RoomTable, ...seats: number[]) => seats.every((s) => s < shared.seats.length);
 
-export function moveSeat(shared: RoomShared, seat: number, to: number): RoomShared {
+export function moveSeat(shared: RoomTable, seat: number, to: number): RoomTable {
   if (!seatsExist(shared, seat, to)) return shared;
   return update(shared, (d) => moveIn(d.seats, seat, to));
 }
 
-export function removeSeat(shared: RoomShared, seat: number): RoomShared {
+export function removeSeat(shared: RoomTable, seat: number): RoomTable {
   if (seat >= shared.seats.length) return shared;
   return update(shared, (d) => {
     d.seats.splice(seat, 1);
@@ -364,7 +364,7 @@ export function removeSeat(shared: RoomShared, seat: number): RoomShared {
 // --- OGS ---
 
 /** A seat taken before the claim arrived takes the verified name (unique among the others) and avatar too. */
-function renameSeat(d: Draft<RoomShared>, shared: RoomShared, callerId: string, claim: OgsClaim): void {
+function renameSeat(d: Draft<RoomTable>, shared: RoomTable, callerId: string, claim: OgsClaim): void {
   const seat = d.seats.find((s) => s.id === callerId);
   if (!seat) return;
   seat.name = seatName({ ...shared, seats: shared.seats.filter((s) => s.id !== callerId) }, claim.name);
@@ -372,14 +372,14 @@ function renameSeat(d: Draft<RoomShared>, shared: RoomShared, callerId: string, 
 }
 
 /** The caller sits with this household; a new household joins the room's list, a known one takes the latest label. */
-function seatOnCouch(d: Draft<RoomShared>, callerId: string, { sid, label }: { sid: string; label: string }): void {
+function seatOnCouch(d: Draft<RoomTable>, callerId: string, { sid, label }: { sid: string; label: string }): void {
   d.couchOf[callerId] = sid;
   const known = d.couches.find((c) => c.sid === sid);
   if (known) known.label = label;
   else d.couches.push({ sid, label, away: false });
 }
 
-export function applyClaim(shared: RoomShared, callerId: string, claim: OgsClaim): RoomShared {
+export function applyClaim(shared: RoomTable, callerId: string, claim: OgsClaim): RoomTable {
   return update(shared, (d) => {
     d.claims[callerId] = claim;
     renameSeat(d, shared, callerId, claim);
@@ -387,7 +387,7 @@ export function applyClaim(shared: RoomShared, callerId: string, claim: OgsClaim
   });
 }
 
-export function setAway(shared: RoomShared, callerId: string, away: boolean): RoomShared {
+export function setAway(shared: RoomTable, callerId: string, away: boolean): RoomTable {
   const sid = shared.couchOf[callerId];
   if (sid === undefined) return shared;
   return update(shared, (d) => {
@@ -398,10 +398,10 @@ export function setAway(shared: RoomShared, callerId: string, away: boolean): Ro
 
 // --- AI players ---
 
-const isAi = (shared: RoomShared, id: string): boolean => shared.seats.some((s) => s.id === id && s.ai);
+const isAi = (shared: RoomTable, id: string): boolean => shared.seats.some((s) => s.id === id && s.ai);
 
 /** The AI player on turn and what it would do now; null when a person is on turn or it waits. */
-export function aiTurn(shared: RoomShared): { id: string; action: BotAction } | null {
+export function aiTurn(shared: RoomTable): { id: string; action: BotAction } | null {
   const r = shared.round;
   const id = r?.seats[r.turn]?.id;
   if (!r || !id || !isAi(shared, id) || r.phase.kind === "out") return null;
@@ -426,7 +426,7 @@ function aiMove(m: Mover, a: BotAction): Move {
 }
 
 /** The AI player on turn makes its move. */
-export function aiAct(shared: RoomShared): MoveOutcome {
+export function aiAct(shared: RoomTable): MoveOutcome {
   const turn = aiTurn(shared);
   const r = shared.round;
   if (!turn || !r) return { shared, accepted: false, seat: -1 };
@@ -436,7 +436,7 @@ export function aiAct(shared: RoomShared): MoveOutcome {
 }
 
 /** AI players (not on turn) that want the fresh discard. */
-export function aiBuyers(shared: RoomShared): string[] {
+export function aiBuyers(shared: RoomTable): string[] {
   const r = shared.round;
   if (!r) return [];
   const turnId = r.seats[r.turn]?.id;
@@ -444,18 +444,18 @@ export function aiBuyers(shared: RoomShared): string[] {
 }
 
 /** Each AI player that wants the fresh discard asks to buy it. */
-export function aiBuy(shared: RoomShared): RoomShared {
+export function aiBuy(shared: RoomTable): RoomTable {
   return aiBuyers(shared).reduce((acc, id) => act(acc, id, { type: "BUY" }).shared, shared);
 }
 
-export const cutterIsAi = (shared: RoomShared): boolean => {
+export const cutterIsAi = (shared: RoomTable): boolean => {
   const id = shared.cutter === null ? undefined : shared.seats[shared.cutter]?.id;
   return id !== undefined && isAi(shared, id);
 };
 
 
 /** Does an AI player not on turn sit at the table (someone who might buy)? */
-export const aiMightBuy = (shared: RoomShared): boolean => {
+export const aiMightBuy = (shared: RoomTable): boolean => {
   const turnId = shared.round?.seats[shared.round.turn]?.id;
   return shared.seats.some((s) => s.ai && s.id !== turnId);
 };

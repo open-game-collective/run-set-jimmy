@@ -3,10 +3,11 @@
  * uses these objects, and the client builds its socket from them (actorClient<typeof RoomContract>),
  * so this module stays free of zod and the message handlers.
  */
-import { view } from "@actor-kit/core";
+import { localOf, matches, view } from "@actor-kit/core";
 import type { RoomState } from "./room";
 import { seatOf } from "./room.rules";
-import { NO_DEADLINES, type Deadlines, type RoomStateValue } from "./room.types";
+import { NO_DEADLINES, type Deadlines, type RoomShared, type RoomStateValue, type RoomTable } from "./room.types";
+import type { RoundState } from "./game/round";
 import { PHASES, RoomViewSchema, type RoomWireView } from "./room.wire";
 import { playerView, publicView } from "./views";
 
@@ -20,14 +21,15 @@ export const roomRoles = {
 
 type Role = keyof typeof roomRoles;
 
-const isNumber = (x: unknown): x is number => typeof x === "number";
+/** Between rounds the table's round is the one just finished (on the scores), or none. */
+export const atRest = ({ finished, ...rest }: RoomShared): RoomTable => ({ ...rest, round: finished });
+export const rested = ({ round, ...rest }: RoomTable): RoomShared => ({ ...rest, finished: round });
+/** During play the round lives in playing's local; shared state holds none. */
+export const inPlay = ({ finished: _none, ...rest }: RoomShared, round: RoundState): RoomTable => ({ ...rest, round });
+export const played = ({ round: _local, ...rest }: RoomTable): RoomShared => ({ ...rest, finished: null });
 
-/** A local that counts down to something (the cut, the buy window) or holds an AI player's next move. */
-const field = (local: unknown, key: "endsAt" | "aiActAt"): number | null => {
-  if (typeof local !== "object" || local === null || !(key in local)) return null;
-  const value: unknown = Reflect.get(local, key);
-  return isNumber(value) ? value : null;
-};
+/** The table in any state: the round from playing's local while playing. */
+export const tableOf = (st: RoomState): RoomTable => (matches(st, "playing") ? inPlay(st.shared, localOf(st).round) : atRest(st.shared));
 
 /** The phase as the screens name it ("playing.window"). */
 export const valueOf = (st: RoomState): RoomStateValue => {
@@ -37,23 +39,20 @@ export const valueOf = (st: RoomState): RoomStateValue => {
 
 /** The deadlines in the active state's local (the innermost level), for the screens' countdowns. */
 function deadlinesOf(st: RoomState): Deadlines {
-  const local: unknown = st.locals.at(-1);
-  const at = valueOf(st);
-  return {
-    ...NO_DEADLINES,
-    cutEndsAt: at === "cutting" ? field(local, "endsAt") : null,
-    windowEndsAt: at === "playing.window" ? field(local, "endsAt") : null,
-    aiActAt: field(local, "aiActAt"),
-  };
+  if (matches(st, "cutting")) return { ...NO_DEADLINES, cutEndsAt: localOf(st).endsAt, aiActAt: localOf(st).aiActAt };
+  if (matches(st, ["playing", "window"])) return { ...NO_DEADLINES, windowEndsAt: localOf(st).endsAt, aiActAt: localOf(st).aiActAt };
+  if (matches(st, ["playing", "acting"])) return { ...NO_DEADLINES, aiActAt: localOf(st).aiActAt };
+  return NO_DEADLINES;
 }
 
 /** What `caller` sees: the table, and their own seat and hand when they sit at it. */
 function wire(st: RoomState, role: Role, caller: string | null): RoomWireView {
   const seat = caller === null ? -1 : seatOf(st.shared, caller);
+  const table = tableOf(st);
   return {
     value: valueOf(st),
-    public: publicView(st.shared, deadlinesOf(st)),
-    private: { role, player: role === "player" && seat >= 0 ? playerView(st.shared, seat) : null },
+    public: publicView(table, deadlinesOf(st)),
+    private: { role, player: role === "player" && seat >= 0 ? playerView(table, seat) : null },
   };
 }
 

@@ -3,6 +3,24 @@
 Port of Run Set Jimmy from actor-kit 0.52.6 (XState) to actor-kit v0.3. Each item: what I tried,
 what happened, the workaround in this repo. Most important first.
 
+## Round 3: `claude/v0.3` at `59e593d` (0.3.0-next.0)
+
+Items 14, 15 and 18 are adopted: the round now lives in `playing`'s local (moves pass it with
+`goto(..., { locals: { playing } })`, `stay`, `reenter`), views use `matches` / `localOf` from
+`@actor-kit/core`, and the Worker's binding is `DurableObjectNamespace<InstanceType<typeof RoomActor>>`
+(the hand-written stub is gone). 16, 17 (`scripts/vendor.sh`) and 19 need nothing here.
+
+20. **One settle function cannot return a transition for handlers at different levels.** A move
+    (at `playing`), the buy window's timer (at `playing.window`) and the AI's timer (at
+    `playing.acting`) all end the same way: stay, switch child, re-arm, or end the round. But
+    `ctx.goto` / `ctx.reenter` / `ctx.stay` are typed per level (`KeptLocals<SD, P, Target>`,
+    the merged local), so a shared helper taking `ctx` would need `P` generic, and the conditional
+    types don't resolve for a generic `P`. *Workaround:* `settle()` returns a plain plan
+    (`over` / `stay` / `rearm` / `switch`) and each handler applies it with its own `ctx`: four
+    near-identical blocks in `src/room.ts`. *Suggest:* a level-independent transition value
+    (e.g. `transition.goto(path, shared, { locals })`) that any handler at or below the kept
+    level may return, checked at runtime like the untyped `goto()`.
+
 ## Round 2: v0.3 final (`claude/v0.3` at `4181811`)
 
 Items 1–13 below (round 1, on `a384ecd`) are fixed in v0.3 and taken up here: nested states,

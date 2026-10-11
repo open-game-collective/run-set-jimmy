@@ -9,7 +9,8 @@ import { simulate, type SimActor, type Simulation } from "@actor-kit/test";
 import { botMove, wantsBuy } from "../game/bot";
 import type { RoundState } from "../game/round";
 import { BUY_WINDOW_MS, RoomContract, type RoomState } from "../room";
-import type { OgsClaim, RoomMessage, RoomPrivateContext, RoomPublicContext, RoomShared } from "../room.types";
+import type { OgsClaim, RoomMessage, RoomPrivateContext, RoomPublicContext, RoomTable } from "../room.types";
+import { tableOf } from "../room.views";
 import { RoomViewSchema, type RoomWireView } from "../room.wire";
 
 export const TV = "tv-1";
@@ -62,7 +63,7 @@ function ownSlot(p: RoomWireView["private"]): { role?: "tv" | "player"; player?:
 /** The room as v1's tests read it: the phase, what the TV sees, each caller's own slot, and the server-only state. */
 export function snap(room: TestRoom): {
   value: string;
-  context: { public: RoomPublicContext; private: Record<string, ReturnType<typeof ownSlot>>; server: RoomShared };
+  context: { public: RoomPublicContext; private: Record<string, ReturnType<typeof ownSlot>>; server: RoomTable };
 } {
   const st = state(room);
   const callers = [st.shared.tvId, ...st.shared.seats.filter((s) => !s.ai).map((s) => s.id)];
@@ -71,7 +72,8 @@ export function snap(room: TestRoom): {
     context: {
       public: seen(room, TV).public,
       private: Object.fromEntries(callers.map((id) => [id, ownSlot(seen(room, id).private)])),
-      server: st.shared,
+      // The server-only state as v1 had it: shared state with the round (from playing's local while playing).
+      server: tableOf(st),
     },
   };
 }
@@ -81,7 +83,7 @@ export const pub = (room: TestRoom) => seen(room, TV).public;
 export const value = (room: TestRoom): string => state(room).phase.join(".");
 
 export function round(room: TestRoom): RoundState {
-  const r = state(room).shared.round;
+  const r = tableOf(state(room)).round;
   if (!r) throw new Error("no round dealt");
   return r;
 }

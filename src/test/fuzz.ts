@@ -9,6 +9,7 @@ import { botMove, wantsBuy } from "../game/bot";
 import { mulberry32, type Rng } from "../game/cards";
 import { AI_THINK_MS, BUY_WINDOW_MS, CUT_TIMEOUT_MS, RoomContract } from "../room";
 import type { RoomMessage } from "../room.types";
+import { tableOf } from "../room.views";
 import { RoomViewSchema, type RoomWireView } from "../room.wire";
 
 const CODE = "FUZZ";
@@ -71,27 +72,34 @@ export async function playFuzzGame(seed: number): Promise<FuzzResult> {
   let steps = 0;
 
   let switches = 0;
-  let before: { leaf: string; local: unknown } | null = null;
-  /** playing's local is the round being played, and a switch between its children keeps it. */
+  let before: { leaf: string; melds: number; buys: number } | null = null;
+  /**
+   * playing's local holds the round being played (shared state holds none), and every step,
+   * including each switch between window and acting, carries that round on: melds and buys never
+   * go back (a fresh deal would have none). The deck may grow: an empty deck takes the discards.
+   */
   const checkPlaying = () => {
     const s = st();
     if (s.phase[0] !== "playing") {
       before = null;
       return;
     }
-    const local = s.locals[0];
+    const round = tableOf(s).round;
     const leaf = s.phase.join(".");
-    if (JSON.stringify(local) !== JSON.stringify({ round: s.shared.roundNumber })) leaks.push(`step ${steps}: playing's local is ${JSON.stringify(local)} in round ${s.shared.roundNumber}`);
-    if (before && before.leaf !== leaf) {
-      switches++;
-      if (JSON.stringify(before.local) !== JSON.stringify(local)) leaks.push(`step ${steps}: playing's local changed across ${before.leaf} → ${leaf}`);
+    if (s.shared.finished !== null) leaks.push(`step ${steps}: a finished round in shared state while playing`);
+    if (round === null || round.round !== s.shared.roundNumber) leaks.push(`step ${steps}: playing's local holds round ${round?.round} in round ${s.shared.roundNumber}`);
+    if (round && before) {
+      if (before.leaf !== leaf) switches++;
+      const buys = round.seats.reduce((n, x) => n + x.buys, 0);
+      if (round.melds.length < before.melds || buys < before.buys)
+        leaks.push(`step ${steps}: the round went back across ${before.leaf} → ${leaf} (melds ${before.melds} → ${round.melds.length}, buys ${before.buys} → ${buys})`);
     }
-    before = { leaf, local };
+    before = round ? { leaf, melds: round.melds.length, buys: round.seats.reduce((n, x) => n + x.buys, 0) } : null;
   };
 
   const check = () => {
     checkPlaying();
-    const r = st().shared.round;
+    const r = tableOf(st()).round;
     for (const caller of callers) {
       const view = RoomViewSchema.parse(room.view(caller));
       const ids = cardIdsIn(view);
@@ -109,7 +117,7 @@ export async function playFuzzGame(seed: number): Promise<FuzzResult> {
     const s = st();
     const phase = s.phase.join(".");
     if (phase === "gameOver") break;
-    const sh = s.shared;
+    const sh = tableOf(s);
     if (phase === "lobby") throw new Error(`seed ${seed}: never started`);
     if (phase === "roundOver") {
       send(hostOf(), { type: "NEXT_ROUND" });
@@ -125,7 +133,7 @@ export async function playFuzzGame(seed: number): Promise<FuzzResult> {
       if (phase === "playing.window") {
         for (const seat of r.seats)
           if (seat.id !== turn && people.includes(seat.id) && wantsBuy(r, seat.id) && rng() < 0.8) send(seat.id, { type: "BUY" });
-        const after = st().shared.round;
+        const after = tableOf(st()).round;
         const move = after && !turnIsAi ? botMove(after, turn) : null;
         if (move?.type === "draw" && rng() < 0.9) send(turn, { type: "DRAW", from: move.from });
         else sim.advance(turnIsAi ? AI_THINK_MS : BUY_WINDOW_MS);

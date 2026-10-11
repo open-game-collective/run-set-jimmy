@@ -44,8 +44,9 @@ friends, 3–7 seats: people, or AI players the room plays itself). The TV shows
   → `arrange` (order a run, placements) → `round` (deal/cut, turns, buy window, go down, play on,
   discard, out) → `game` (7 rounds, totals). `bot` + `sim` play whole games (tests, recordings).
 - `src/room.ts`: the actor contract (`kit.actor`). States lobby → cutting → playing { window ⇄
-  acting } → roundOver → gameOver; every timer is a durable `scope: "state"` timer; messages name
-  the roles that may send them. `src/room.rules.ts`: the transitions (pure). `src/room.views.ts`:
+  acting } → roundOver → gameOver; the round lives in `playing`'s local (the rules work on the
+  table: shared state + the round, `tableOf` in room.views.ts); every timer is a durable
+  `scope: "state"` timer; messages name the roles that may send them. `src/room.rules.ts`: the transitions (pure). `src/room.views.ts`:
   roles and views, zod-free (the client builds its socket from them); `src/room.wire.ts`: the view
   schema. Keep zod out of client code (`zod/mini` if a check is needed there).
 - Handlers read time and randomness only through `ctx.now()` / `ctx.random()` (replay checks it).

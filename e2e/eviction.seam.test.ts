@@ -69,18 +69,22 @@ afterEach(killServer);
 const Row = z.object({ state: z.string() });
 const EventRow = z.object({ seq: z.number(), cause_type: z.string(), name: z.string().nullable(), caller: z.string().nullable(), created_at: z.number() });
 const TimerRow = z.object({ name: z.string(), fire_at: z.number() });
-const StateZ = z.object({
-  /** The active path, dotted ("playing.window"). */
-  phase: z.array(z.string()).transform((path) => path.join(".")),
-  /** The innermost state's local (the deadlines). */
-  locals: z.array(z.unknown()).transform((locals) => locals.at(-1)),
-  shared: z.object({
-    seats: z.array(z.object({ id: z.string(), ai: z.boolean() })),
-    cutter: z.number().nullable(),
-    log: z.array(z.object({ seq: z.number(), text: z.string() })),
-    round: z.object({ turn: z.number(), seats: z.array(z.object({ id: z.string() })) }).nullable(),
-  }),
-});
+const RoundZ = z.object({ turn: z.number(), seats: z.array(z.object({ id: z.string() })) });
+/** The stored state: the dotted path, the innermost local (deadlines), and the round (playing's local while playing). */
+const StateZ = z
+  .object({
+    phase: z.array(z.string()),
+    locals: z.array(z.unknown()),
+    shared: z.object({
+      seats: z.array(z.object({ id: z.string(), ai: z.boolean() })),
+      cutter: z.number().nullable(),
+      log: z.array(z.object({ seq: z.number(), text: z.string() })),
+    }),
+  })
+  .transform(({ phase, locals, shared }) => {
+    const playing = phase[0] === "playing" ? z.object({ round: RoundZ }).safeParse(locals[0]) : null;
+    return { phase: phase.join("."), locals: locals.at(-1), shared, round: playing?.success ? playing.data.round : null };
+  });
 const DeadlineZ = z.object({ endsAt: z.number() });
 
 /** The room's SQLite file (read-only; workerd keeps writing it). */
@@ -235,7 +239,7 @@ describe("a room evicted mid-game carries on by itself (durable timers, no clien
     const person = phones[0]?.id ?? "";
     await until("an AI player to be thinking", () => {
       const { state, timers } = read(code);
-      const turn = state.shared.round?.seats[state.shared.round.turn]?.id ?? "";
+      const turn = state.round?.seats[state.round.turn]?.id ?? "";
       return state.phase !== "cutting" && turn.startsWith("ai:") && timers.some((t) => t.name === "aiThink") ? true : null;
     });
     const lastSeq = read(code).events.at(-1)?.seq ?? 0;
@@ -247,7 +251,7 @@ describe("a room evicted mid-game carries on by itself (durable timers, no clien
       "the AI players to finish their turns",
       () => {
         const r = read(code);
-        const round = r.state.shared.round;
+        const round = r.state.round;
         const turn = round?.seats[round.turn]?.id;
         return turn === person && r.state.phase === "playing.acting" ? r : null;
       },

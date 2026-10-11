@@ -12,10 +12,10 @@ import {
   type Seat as RoundSeat,
   type TableMeld,
 } from "./game/round";
-import type { Deadlines, PlayerView, RoomPublicContext, RoomShared } from "./room.types";
+import type { Deadlines, PlayerView, RoomPublicContext, RoomTable } from "./room.types";
 
 /** The host: the first person at the table (AI players never host). -1 before anyone sits. */
-export const hostIndex = (server: RoomShared): number => server.seats.findIndex((s) => !s.ai);
+export const hostIndex = (server: RoomTable): number => server.seats.findIndex((s) => !s.ai);
 
 /**
  * Households (OGS multiCouch). A seat sits with the household its verified token named, else with
@@ -23,34 +23,34 @@ export const hostIndex = (server: RoomShared): number => server.seats.findIndex(
  */
 export const HOME = "home";
 
-export function seatCouch(server: RoomShared, seat: number): string {
+export function seatCouch(server: RoomTable, seat: number): string {
   const id = server.seats[seat]?.id;
   return (id && server.couchOf[id]) || server.couchOf[server.tvId] || HOME;
 }
 
 /** Households that have players, in arrival order. */
-export function seatedCouches(server: RoomShared): string[] {
+export function seatedCouches(server: RoomTable): string[] {
   const seated = new Set(server.seats.map((_, i) => seatCouch(server, i)));
   const known = server.couches.map((c) => c.sid).filter((sid) => seated.has(sid));
   return [...known, ...[...seated].filter((sid) => !known.includes(sid))];
 }
 
-export const isMultiCouch = (server: RoomShared): boolean => seatedCouches(server).length > 1;
+export const isMultiCouch = (server: RoomTable): boolean => seatedCouches(server).length > 1;
 
-const seatsOnCouch = (server: RoomShared, sid: string): number[] =>
+const seatsOnCouch = (server: RoomTable, sid: string): number[] =>
   server.seats.flatMap((_, i) => (seatCouch(server, i) === sid ? [i] : []));
 
-function householdView(server: RoomShared, sid: string): RoomPublicContext["households"][number] {
+function householdView(server: RoomTable, sid: string): RoomPublicContext["households"][number] {
   const c = server.couches.find((x) => x.sid === sid);
   return { sid, label: c?.label ?? "Home", away: c?.away ?? false, seats: seatsOnCouch(server, sid) };
 }
 
-function householdsView(server: RoomShared): RoomPublicContext["households"] {
+function householdsView(server: RoomTable): RoomPublicContext["households"] {
   if (!isMultiCouch(server)) return [];
   return seatedCouches(server).map((sid) => householdView(server, sid));
 }
 
-const seatIndexOf = (server: RoomShared, id: string) => server.seats.findIndex((s) => s.id === id);
+const seatIndexOf = (server: RoomTable, id: string) => server.seats.findIndex((s) => s.id === id);
 
 /** The requester who would get the card if the turn player lets it go: closest after them. */
 function buyerOf(r: RoundState, requests: readonly string[]): string | null {
@@ -93,7 +93,7 @@ function turnView(r: RoundState, index: SeatIndex): Pick<RoomPublicContext, "tur
   return r.phase.kind === "out" ? { turn: null, roundWinner: index(r.phase.winner) } : { turn: r.turn, roundWinner: null };
 }
 
-function roundView(server: RoomShared, windowEndsAt: number | null): Partial<RoomPublicContext> {
+function roundView(server: RoomTable, windowEndsAt: number | null): Partial<RoomPublicContext> {
   const r = server.round;
   if (!r) return {};
   const index = (id: string) => seatIndexOf(server, id);
@@ -117,14 +117,14 @@ function inRoundView(inRound: RoundSeat | undefined): { cards: number; down: boo
 }
 
 /** The seat's household label, shown only when more than one household plays. */
-function couchLabel(server: RoomShared, seat: number, multi: boolean): string | null {
+function couchLabel(server: RoomTable, seat: number, multi: boolean): string | null {
   if (!multi) return null;
   return server.couches.find((c) => c.sid === seatCouch(server, seat))?.label ?? "Home";
 }
 
 function seatView(
-  server: RoomShared,
-  s: RoomShared["seats"][number],
+  server: RoomTable,
+  s: RoomTable["seats"][number],
   seat: number,
   roundSeats: readonly RoundSeat[],
   multi: boolean,
@@ -144,11 +144,11 @@ function requirementView(round: number): RoomPublicContext["requirement"] {
   return { ...req, text: describeRequirement(req), name: ROUND_NAMES[round - 1] ?? "" };
 }
 
-const dealerView = (server: RoomShared): number | null =>
+const dealerView = (server: RoomTable): number | null =>
   server.roundNumber > 0 ? (server.roundNumber - 1) % Math.max(1, server.seats.length) : null;
 
 /** Each round's scores, the running totals and the winners, by seat. */
-function sheetView(server: RoomShared): Pick<RoomPublicContext, "scores" | "totals" | "winners"> {
+function sheetView(server: RoomTable): Pick<RoomPublicContext, "scores" | "totals" | "winners"> {
   const sheet = server.sheet;
   if (!sheet) return { scores: [], totals: server.seats.map(() => 0), winners: [] };
   return {
@@ -158,9 +158,9 @@ function sheetView(server: RoomShared): Pick<RoomPublicContext, "scores" | "tota
   };
 }
 
-const roundSeatsOf = (server: RoomShared): readonly RoundSeat[] => server.round?.seats ?? [];
+const roundSeatsOf = (server: RoomTable): readonly RoundSeat[] => server.round?.seats ?? [];
 
-export function publicView(server: RoomShared, deadlines: Deadlines): RoomPublicContext {
+export function publicView(server: RoomTable, deadlines: Deadlines): RoomPublicContext {
   const multi = isMultiCouch(server);
   const roundSeats = roundSeatsOf(server);
   const { scores, totals, winners: won } = sheetView(server);
@@ -195,7 +195,7 @@ export function publicView(server: RoomShared, deadlines: Deadlines): RoomPublic
   };
 }
 
-function standingsBySeat(server: RoomShared): number[] {
+function standingsBySeat(server: RoomTable): number[] {
   const table = server.sheet ? standings(server.sheet) : [];
   return server.seats.map((s) => table.find((t) => t.id === s.id)?.total ?? 0);
 }
@@ -205,7 +205,7 @@ const isTurnOf = (r: RoundState | null, id: string): boolean =>
   r !== null && r.phase.kind !== "out" && r.seats[r.turn]?.id === id;
 const hasAskedToBuy = (r: RoundState | null, id: string): boolean => r !== null && requestsOf(r.phase).includes(id);
 
-export function playerView(server: RoomShared, seat: number): PlayerView {
+export function playerView(server: RoomTable, seat: number): PlayerView {
   const id = server.seats[seat]?.id ?? "";
   const r = server.round;
   return {

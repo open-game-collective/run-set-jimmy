@@ -5,25 +5,19 @@ import { APP_ID } from "./game/sitting";
 import { signId, verifyId } from "./identity";
 import { hostTarget, ogsClaim } from "./ogs-claim";
 import { RoomContract } from "./room";
-import type { Boot, RoomMessage } from "./room.types";
+import type { Boot } from "./room.types";
 
 /** The room actor (actor-kit v2). v1's `Room` class stays as a placeholder (src/legacy-objects.ts). */
 export const RoomActor = createActorClass(RoomContract);
 export { Game, Remix, Room, Session } from "./legacy-objects";
 
-type RoomStub = {
-  spawn(input: { actorId: string; caller: string; callerType: "service"; input: { code: string; tvId: string } }): Promise<void>;
-  getSnapshot(caller: string, callerType: "user" | "service"): Promise<{ checksum: string; snapshot: unknown; role: string }>;
-  send(caller: string, callerType: "user" | "service", event: RoomMessage): Promise<{ ok: true } | { ok: false; code: string; message: string }>;
-  fetch(req: Request): Promise<Response>;
-};
-
 export interface WorkerEnv extends Env {
   ASSETS: Fetcher;
-  ROOM: { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): RoomStub };
+  /** Typed from the actor class: send, and getSnapshot's view narrowed by role. */
+  ROOM: DurableObjectNamespace<InstanceType<typeof RoomActor>>;
 }
 
-const stubFor = (env: WorkerEnv, code: string): RoomStub => env.ROOM.get(env.ROOM.idFromName(code));
+const stubFor = (env: WorkerEnv, code: string) => env.ROOM.get(env.ROOM.idFromName(code));
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 const ROOM_CODE = /^[A-Z]{4}$/;
@@ -55,7 +49,7 @@ async function servePage(req: Request, env: WorkerEnv, page: "tv" | "join", room
   // The first TV page makes the room (later TVs, of other households, just watch it).
   if (page === "tv") await stub.spawn({ actorId: roomCode, caller: "worker", callerType: "service", input: { code: roomCode, tvId: token } });
 
-  let snap: Awaited<ReturnType<RoomStub["getSnapshot"]>>;
+  let snap: Awaited<ReturnType<ReturnType<typeof stubFor>["getSnapshot"]>>;
   try {
     snap = await stub.getSnapshot(token, "user");
   } catch {

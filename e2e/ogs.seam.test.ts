@@ -148,7 +148,7 @@ const roomOf = (page: Page) => new URL(page.url()).pathname.split("/")[2] ?? "";
 async function tvSeats(code: string): Promise<{ name: string; avatar: string | null; couch: string | null }[]> {
   const page = await (await (await browserP).newContext()).newPage();
   await page.goto(`${BASE}/tv/${code}`);
-  const seats = await page.evaluate(() => JSON.parse(document.getElementById("boot")?.textContent ?? "{}").view.seats);
+  const seats = await page.evaluate(() => JSON.parse(document.getElementById("boot")?.textContent ?? "{}").view.public.seats);
   await page.close();
   return seats;
 }

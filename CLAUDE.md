@@ -14,6 +14,7 @@ friends, 3–7 seats: people, or AI players the room plays itself). The TV shows
 1. `pnpm typecheck`
 2. `pnpm test` (engine, room actor through `simulate()`, client helpers, a 25-game fuzz sample)
 3. `pnpm test:fuzz` after a change to the room or the engine (1,000 seeded games, ~3 min)
+   (a deployment: `GAME_URL=… pnpm exec tsx e2e/smoke.ts` and `e2e/latency.ts`, see docs/spec.md)
 4. `pnpm dev:seam` in one shell, then `pnpm test:seam` (OGS contract, 4 phones over the wire, and
    DO eviction: `e2e/eviction.seam.test.ts` runs its own `wrangler dev` on 8899)
 5. After visible changes: `pnpm dev`, then `pnpm record` (TV + phones video) and look at it
@@ -42,10 +43,11 @@ friends, 3–7 seats: people, or AI players the room plays itself). The TV shows
 - `src/game/`: `cards` (shoe, points) → `melds` (runs/sets, jokers fixed by position, slide rule)
   → `arrange` (order a run, placements) → `round` (deal/cut, turns, buy window, go down, play on,
   discard, out) → `game` (7 rounds, totals). `bot` + `sim` play whole games (tests, recordings).
-- `src/room.ts`: the actor contract. Phases lobby → cutting → window ⇄ acting → roundOver →
-  gameOver (window/acting become `playing.*` children once actor-kit nests states); every timer is
-  a durable `scope: "state"` timer. `src/room.rules.ts`: the transitions (pure). `src/views.ts` +
-  `src/room.wire.ts`: what each caller sees, and how the client parses it back.
+- `src/room.ts`: the actor contract (`kit.actor`). States lobby → cutting → playing { window ⇄
+  acting } → roundOver → gameOver; every timer is a durable `scope: "state"` timer; messages name
+  the roles that may send them. `src/room.rules.ts`: the transitions (pure). `src/room.views.ts`:
+  roles and views, zod-free (the client builds its socket from them); `src/room.wire.ts`: the view
+  schema. Keep zod out of client code (`zod/mini` if a check is needed there).
 - Handlers read time and randomness only through `ctx.now()` / `ctx.random()` (replay checks it).
 - Tests: `src/test/room-test-helpers.ts` runs the room in `simulate()`; `src/test/fuzz.ts` plays
   whole games and replays their journals. actor-kit gaps go in docs/actor-kit-v2-feedback.md.

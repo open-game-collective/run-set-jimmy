@@ -5,7 +5,7 @@
  */
 import { chromium, type Page } from "playwright";
 import { afterAll, describe, expect, it } from "vitest";
-import { myTurnToDraw, myTurnToPlay, phoneWithTwoAi, until } from "./my-turn";
+import { drawFromDeck, myTurnStarts, myTurnToPlay, phoneWithTwoAi, takeTheDiscard, until } from "./my-turn";
 import { readView } from "./phone-bot";
 
 const browserP = chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
@@ -31,27 +31,25 @@ async function discardsAfterTappingACard(page: Page): Promise<void> {
 describe("a person's turn on the phone", () => {
   it("after taking the discard: tap a card, then discard it (finding 5)", async () => {
     const page = await phoneWithTwoAi(await browserP);
-    await myTurnToDraw(page, false);
-    await page.getByRole("button", { name: /^Take the / }).click();
+    await takeTheDiscard(page, await myTurnStarts(page));
     await myTurnToPlay(page);
     await discardsAfterTappingACard(page);
   }, 300_000);
 
   it("after opening and cancelling Go down: tap a card, then discard it (finding 7)", async () => {
     const page = await phoneWithTwoAi(await browserP);
-    await myTurnToDraw(page, true);
-    await page.getByRole("button", { name: "Draw from the deck" }).click();
+    await drawFromDeck(page, await myTurnStarts(page));
     await myTurnToPlay(page);
     await page.getByRole("button", { name: "Go down" }).click();
     await page.getByRole("button", { name: "Cancel" }).click();
     await discardsAfterTappingACard(page);
   }, 300_000);
 
-  it("a double tap on Draw from the deck draws once and shows no refusal (finding 6)", async () => {
+  it("a double tap on the draw (Draw from the deck, or Let it go on an offer) draws once and shows no refusal (finding 6)", async () => {
     const page = await phoneWithTwoAi(await browserP);
-    await myTurnToDraw(page, true);
+    const start = await myTurnStarts(page);
     const before = await handSize(page);
-    await page.getByRole("button", { name: "Draw from the deck" }).dblclick();
+    await drawFromDeck(page, start, "dblclick");
     await myTurnToPlay(page);
     // Long enough for a second DRAW's refusal to come back and show.
     await page.waitForTimeout(1500);

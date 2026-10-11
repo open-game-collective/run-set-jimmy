@@ -647,3 +647,20 @@ describe("a buy that lands as the buy window closes (bug bash 2026-10-11, findin
     expect(value(room)).toBe("playing.window");
   });
 });
+
+describe("a turn that starts with an offer (RULES.md Buying; production turn.seam, 2026-10-11)", () => {
+  it("letting the offer go draws for the turn player: the turn goes straight on to play", () => {
+    const room = startedRoom();
+    send(room, CAT, { type: "BUY" });
+    room.clock.increment(BUY_WINDOW_MS);
+    expect(pub(room).turnPhase).toBe("offer");
+    const before = view(room, BEN).player?.hand.length ?? 0;
+    send(room, BEN, { type: "ANSWER", answer: "let-go" });
+    expect(pub(room).turnPhase).toBe("play");
+    expect(view(room, BEN).player?.myTurn).toBe(true);
+    expect(view(room, BEN).player?.hand).toHaveLength(before + 1);
+    // Drawing again is refused: the let-go was the draw.
+    send(room, BEN, { type: "DRAW", from: "deck" });
+    expect(view(room, BEN).player?.oops?.line).toBe("You already drew this turn");
+  });
+});

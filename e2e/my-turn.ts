@@ -28,16 +28,39 @@ export async function phoneWithTwoAi(browser: Browser): Promise<Page> {
 }
 
 /**
- * Waits for this phone's turn to draw. `windowClosed`: also wait for the buy window to close. When
- * an AI player asked to buy, the turn starts with an offer: the phone lets the card go, then draws.
+ * How this phone's turn goes on once the buy window has closed: "draw" (take the discard or draw
+ * from the deck), or "offer" when someone asked to buy the discard: take it, or let it go and the
+ * room draws for you (RULES.md "Buying"). Which one depends on the deal (an AI player wanting the
+ * card), so each test handles both.
  */
-export async function myTurnToDraw(page: Page, windowClosed: boolean): Promise<void> {
-  await until("my turn to draw", async () => {
+export type TurnStart = "draw" | "offer";
+
+export async function myTurnStarts(page: Page): Promise<TurnStart> {
+  const start = await until("my turn", async (): Promise<TurnStart | null> => {
     const v = await readView(page);
     last = v ? `${JSON.stringify(v.value)} turn ${v.pub.turn} ${v.pub.turnPhase} window ${v.pub.window !== null} mine ${v.me?.myTurn}` : "no view";
-    if (v?.me?.myTurn && v.pub.turnPhase === "offer") await page.getByRole("button", { name: "Let it go" }).click();
-    return v?.me?.myTurn && v.pub.turnPhase === "draw" && (!windowClosed || v.pub.window === null) ? true : null;
+    // Only once the buy window has closed is the start settled: a buy asked during the window
+    // turns a "draw" into an "offer" when it closes.
+    if (!v?.me?.myTurn || v.pub.window !== null) return null;
+    return v.pub.turnPhase === "offer" ? "offer" : v.pub.turnPhase === "draw" ? "draw" : null;
   });
+  // Which start a run met (both must pass; the logs show both were exercised).
+  console.info(`[turn start] ${start}`);
+  return start;
+}
+
+/** The draw from the deck: let an offer go (the room draws for you), or wait out the window and tap Draw. */
+export async function drawFromDeck(page: Page, start: TurnStart, tap: "click" | "dblclick" = "click"): Promise<void> {
+  if (start === "offer") {
+    await page.getByRole("button", { name: "Let it go" })[tap]();
+    return;
+  }
+  await page.getByRole("button", { name: "Draw from the deck" })[tap]();
+}
+
+/** Takes the discard: "Take it" on an offer, "Take the X" otherwise. */
+export async function takeTheDiscard(page: Page, start: TurnStart): Promise<void> {
+  await page.getByRole("button", { name: start === "offer" ? "Take it" : /^Take the / }).click();
 }
 
 export const myTurnToPlay = (page: Page) => until("my turn to play", async () => ((await readView(page))?.pub.turnPhase === "play" ? true : null));

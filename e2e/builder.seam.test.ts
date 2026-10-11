@@ -6,7 +6,7 @@
 import { chromium, type Page } from "playwright";
 import { afterAll, describe, expect, it } from "vitest";
 import { builderSlots, layDownHint } from "../src/client/hand";
-import { myTurnToDraw, myTurnToPlay, phoneWithTwoAi } from "./my-turn";
+import { drawFromDeck, myTurnStarts, myTurnToPlay, phoneWithTwoAi } from "./my-turn";
 import { readView } from "./phone-bot";
 
 const browserP = chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
@@ -14,8 +14,7 @@ afterAll(async () => (await browserP).close());
 
 /** One person and two AI players; returns when it is the person's turn to play (after drawing). */
 async function toMyPlay(page: Page): Promise<void> {
-  await myTurnToDraw(page, true);
-  await page.getByRole("button", { name: "Draw from the deck" }).click();
+  await drawFromDeck(page, await myTurnStarts(page));
   await myTurnToPlay(page);
 }
 

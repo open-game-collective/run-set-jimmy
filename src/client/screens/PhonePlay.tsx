@@ -7,6 +7,7 @@ import { cardName } from "../../game/words";
 import { RoomContext } from "../../room.context";
 import type { RoomPublicContext } from "../../room.types";
 import { MeldCards, PlayingCard, meldTitle } from "../cards";
+import { moveKey, sendOnce } from "../send-once";
 import { applyOrder, builderSlots, layDownHint, placementLabel, slotStatus, sortHand, toProposals, type Slot } from "../hand";
 import { haptic } from "../haptics";
 import { sounds } from "../sound";
@@ -94,11 +95,21 @@ export function PhonePlay() {
   const turnName = pub.turn === null ? "" : (pub.seats[pub.turn]?.name ?? "");
   const windowLeft = useSecondsLeft(pub.window?.endsAt ?? null);
 
-  const act = (event: Parameters<typeof send>[0]) => {
-    haptic();
-    sounds.tap();
-    send(event);
-  };
+  // A double tap sends a move once: the second tap is dropped until the view shows the room's answer.
+  const [once] = useState(sendOnce);
+  const key = moveKey({
+    logSeq: pub.log.at(-1)?.seq ?? 0,
+    turnPhase: pub.turnPhase,
+    handSize: hand.length,
+    buyRequested: me?.buyRequested === true,
+    oopsSeq: me?.oops?.seq ?? 0,
+  });
+  const act = (event: Parameters<typeof send>[0]) =>
+    once(key, () => {
+      haptic();
+      sounds.tap();
+      send(event);
+    });
 
   const inBuilder = new Map<string, number>();
   builder?.forEach((s, i) => s.cards.forEach((c) => inBuilder.set(c.id, i)));
@@ -300,7 +311,7 @@ export function PhonePlay() {
               </button>
             ) : null}
             <button className="btn primary" disabled={!selectedCard} onClick={() => selectedCard && act({ type: "DISCARD", cardId: selectedCard.id })}>
-              {selectedCard ? `Discard the ${cardName(selectedCard)}` : "Pick a card to discard"}
+              {selectedCard ? `Discard the ${cardName(selectedCard)}` : "Tap a card in your hand to discard it"}
             </button>
           </div>
         ) : !myTurn && pub.window && top ? (

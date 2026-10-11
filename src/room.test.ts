@@ -585,3 +585,46 @@ describe("states (playing keeps its local while the window and the turns alterna
     expect(switches).toBeGreaterThan(4);
   });
 });
+
+describe("a buy that lands as the buy window closes (bug bash 2026-10-11, finding 5)", () => {
+  it("a buy 1 ms before the window's timer: the window closes into an offer to the turn player", () => {
+    const room = startedRoom();
+    room.clock.increment(BUY_WINDOW_MS - 1);
+    send(room, CAT, { type: "BUY" });
+    room.clock.increment(1);
+    expect(value(room)).toBe("playing.acting");
+    expect(pub(room).turnPhase).toBe("offer");
+    expect(view(room, BEN).player?.myTurn).toBe(true);
+    send(room, BEN, { type: "ANSWER", answer: "take" });
+    expect(pub(room).turnPhase).toBe("play");
+  });
+
+  it("a buy just after the timer fired is refused for that phone only; the turn player draws and plays on", () => {
+    const room = startedRoom();
+    room.clock.increment(BUY_WINDOW_MS);
+    send(room, CAT, { type: "BUY" });
+    expect(view(room, CAT).player?.oops?.line).toMatch(/window/i);
+    expect(pub(room).turnPhase).toBe("draw");
+    send(room, BEN, { type: "DRAW", from: "deck" });
+    expect(pub(room).turnPhase).toBe("play");
+    const card = view(room, BEN).player?.hand[0]?.id ?? "";
+    send(room, BEN, { type: "DISCARD", cardId: card });
+    expect(value(room)).toBe("playing.window");
+    expect(pub(room).turn).toBe(2);
+  });
+
+  it("the turn player taking the discard at the window's last moment, then a late buy: no stuck turn", () => {
+    const room = startedRoom();
+    room.clock.increment(BUY_WINDOW_MS - 1);
+    send(room, BEN, { type: "DRAW", from: "discard" });
+    send(room, CAT, { type: "BUY" });
+    room.clock.increment(1);
+    expect(value(room)).toBe("playing.acting");
+    expect(pub(room).turnPhase).toBe("play");
+    expect(view(room, BEN).player?.hand).toHaveLength(12);
+    expect(view(room, CAT).player?.hand).toHaveLength(11);
+    const card = view(room, BEN).player?.hand[0]?.id ?? "";
+    send(room, BEN, { type: "DISCARD", cardId: card });
+    expect(value(room)).toBe("playing.window");
+  });
+});

@@ -17,7 +17,8 @@ export async function readView(page: Page): Promise<PhoneView | null> {
   return (await page.evaluate(() => Reflect.get(window, "__rsjView") ?? null)) as PhoneView | null;
 }
 
-export const stateName = (v: RoomStateValue): string => v;
+/** The phase's name: "playing.window" (v2), also from v1's `{ playing: "window" }` (production before the v2 deploy). */
+export const stateName = (v: RoomStateValue | { playing: string }): string => (typeof v === "string" ? v : `playing.${v.playing}`);
 
 const seatId = (i: number) => `s${i}`;
 

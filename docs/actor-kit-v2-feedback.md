@@ -1,8 +1,46 @@
 # actor-kit v2 feedback from the Run Set Jimmy port
 
-Port of Run Set Jimmy from actor-kit 0.52.6 (XState) to actor-kit v0.3, vendored from
-`claude/v0.3` at `a384ecd` (packages still versioned 0.2.0). Each item: what I tried, what
-happened, the workaround in this repo. Most important first.
+Port of Run Set Jimmy from actor-kit 0.52.6 (XState) to actor-kit v0.3. Each item: what I tried,
+what happened, the workaround in this repo. Most important first.
+
+## Round 2: v0.3 final (`claude/v0.3` at `4181811`)
+
+Items 1–13 below (round 1, on `a384ecd`) are fixed in v0.3 and taken up here: nested states,
+roles on messages, typed send, typed `SimActor.state`, `spawnSync`, union/enum views that validate,
+`actorClient<typeof C>({ roles, views })`, `enter` that changes shared state, `ctx.reenter`, the
+rollback and node:sqlite notes in `docs/upgrading-0.3.md`. What still gets in the way:
+
+14. **A transition cannot change a kept parent's local and switch its child.** The plan was to keep
+    the round (`RoundState`) in `playing`'s local. Nearly every move both changes the round and
+    switches `window` ⇄ `acting`: `goto(["playing", "acting"], …)` keeps `playing`'s local as it was
+    (row 7), and a child's `enter` can only set its own local (`ctx.stay(shared, local)` in `enter`
+    does not reach the levels above, unlike row 6 for handlers). *Workaround:* the round stays in
+    shared state; `playing`'s local holds the round number (checked at every step by the fuzz).
+    *Suggest:* `ctx.goto(target, shared, input, { local })` for the kept levels, or let `enter`'s
+    `ctx.stay(shared, mergedLocal)` update the levels above it as row 6 does.
+
+15. **`matches` / `localOf` only come from `@actor-kit/worker`, whose runtime imports zod**
+    (`runtime/phases.ts`). The views module the client imports must stay zod-free, so it reads
+    `st.phase.join(".")` and `st.locals.at(-1)` with small `Reflect.get` guards instead.
+    *Suggest:* export them (and `PathsOf`, `MergedLocal`) from `@actor-kit/core` or a zod-free subpath.
+
+16. **The zod-free client alone did not shrink the bundle.** `join.js` stayed ~840 KB: the game's
+    own `import { z } from "zod"` (classic zod 4, one 3-field check in `pwa.ts`) pulls in ~450 KB
+    because the `z` namespace keeps everything, locales included. *Workaround:* `zod/mini` in client
+    code: `join.js` 860 → 411 KB (v1: 395 KB). *Suggest:* say so in the "Keep zod out of the client
+    bundle" note of `docs/upgrading-0.3.md`.
+
+17. **Packages are still versioned 0.2.0 on `claude/v0.3`.** Re-vendored tarballs have the same name
+    as the previous build, so pnpm's lockfile does not notice a change. *Workaround:* tarballs renamed
+    with the commit (`actor-kit-core-0.2.0-4181811.tgz`). *Suggest:* `0.3.0-next.N` versions.
+
+18. **The Durable Object stub is still typed by hand in the Worker** (`RoomStub` in
+    `src/worker.ts`, as in Codebreakers). Tried `DurableObjectNamespace<InstanceType<typeof RoomActor>>`
+    (from `TypedActorClass`): `send` is typed, but `getSnapshot()` resolves to `never` (the RPC
+    serialization types cannot map `snapshot: unknown`), so the page code cannot read `role` or the
+    view. *Suggest:* type `getSnapshot` with the contract's view union and test the binding type.
+
+## Round 1: v0.3 pre-merge (`claude/v0.3` at `a384ecd`, all fixed in `4181811`)
 
 ## Blocking or costly
 

@@ -50,3 +50,19 @@ Rules: [RULES.md](../RULES.md) (the source of truth for play).
 - A full 7-round game plays end to end on `wrangler dev` with a laptop TV and 3 phones on the LAN.
 - Seam test plays a round over real WebSockets; engine mutation score reported.
 - Then `/ogs-game` for the catalogue entry and art kit.
+
+## Checking a deployment
+- Smoke (TV + 4 bot phones play round 1, screenshots in recordings/smoke/):
+  `GAME_URL=https://run-set-jimmy.jonathanrmumm.workers.dev pnpm exec tsx e2e/smoke.ts`
+- Latency (TV + 3 bot phones play a round in a new room; exits non-zero over its limits):
+  `GAME_URL=https://run-set-jimmy.jonathanrmumm.workers.dev pnpm exec tsx e2e/latency.ts`
+- v1 production baseline, 2026-10-11 (version 10c45a6d; two runs, rooms VTDW and GCZC):
+
+  | | p50 | p95 | max |
+  |---|---|---|---|
+  | move round trip (tap → own screen) | 63–75 ms | 136–176 ms | 272–275 ms |
+  | buy window closed after its deadline | 28–36 ms | 114–126 ms | 217–225 ms |
+  | cut after its deadline (one per run) | 28–47 ms | | |
+
+  Limits in e2e/latency.ts: round trip p95 400 ms, buy window p95 400 ms, cut 1,000 ms.
+

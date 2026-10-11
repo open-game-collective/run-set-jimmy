@@ -70,8 +70,10 @@ const Row = z.object({ state: z.string() });
 const EventRow = z.object({ seq: z.number(), cause_type: z.string(), name: z.string().nullable(), caller: z.string().nullable(), created_at: z.number() });
 const TimerRow = z.object({ name: z.string(), fire_at: z.number() });
 const StateZ = z.object({
-  phase: z.string(),
-  local: z.unknown(),
+  /** The active path, dotted ("playing.window"). */
+  phase: z.array(z.string()).transform((path) => path.join(".")),
+  /** The innermost state's local (the deadlines). */
+  locals: z.array(z.unknown()).transform((locals) => locals.at(-1)),
   shared: z.object({
     seats: z.array(z.object({ id: z.string(), ai: z.boolean() })),
     cutter: z.number().nullable(),
@@ -188,7 +190,7 @@ describe("a room evicted mid-game carries on by itself (durable timers, no clien
     cutter?.send({ type: "CUT", at: 0.4 });
     const endsAt = await until("the buy window", () => {
       const s = read(code).state;
-      return s.phase === "window" ? DeadlineZ.parse(s.local).endsAt : null;
+      return s.phase === "playing.window" ? DeadlineZ.parse(s.locals).endsAt : null;
     });
     const lastSeq = read(code).events.at(-1)?.seq ?? 0;
     for (const p of phones) p.close();
@@ -196,7 +198,7 @@ describe("a room evicted mid-game carries on by itself (durable timers, no clien
     expect(Date.now()).toBeLessThan(endsAt); // evicted before the window's time was up
 
     const ready = await startServer();
-    const closed = await until("the window to close", () => (read(code).state.phase === "acting" ? read(code) : null), 30_000);
+    const closed = await until("the window to close", () => (read(code).state.phase === "playing.acting" ? read(code) : null), 30_000);
     const since = closed.events.filter((e) => e.seq > lastSeq);
     expect(since.map((e) => `${e.cause_type}:${e.name}`)).toEqual(["timer:buyWindow"]);
     expect(since.every((e) => e.caller === null)).toBe(true);
@@ -210,14 +212,14 @@ describe("a room evicted mid-game carries on by itself (durable timers, no clien
   it("evicted during the cut: the room cuts for the cutter on time, after coming back", async () => {
     await startServer();
     const { code, phones } = await startedRoom(3, 0);
-    const endsAt = DeadlineZ.parse(read(code).state.local).endsAt;
+    const endsAt = DeadlineZ.parse(read(code).state.locals).endsAt;
     const lastSeq = read(code).events.at(-1)?.seq ?? 0;
     for (const p of phones) p.close();
     await killServer();
     await startServer();
     expect(Date.now()).toBeLessThan(endsAt - 1000); // back before the deadline: it must wait for it
     expect(read(code).state.phase).toBe("cutting");
-    const dealt = await until("the room's cut", () => (read(code).state.phase === "window" ? read(code) : null), CUT_TIMEOUT_MS + 10_000);
+    const dealt = await until("the room's cut", () => (read(code).state.phase === "playing.window" ? read(code) : null), CUT_TIMEOUT_MS + 10_000);
     const cutEvent = dealt.events.find((e) => e.seq > lastSeq && e.name === "cutTimeout");
     expect(cutEvent?.cause_type).toBe("timer");
     expect(cutEvent?.created_at ?? 0).toBeGreaterThanOrEqual(endsAt);
@@ -247,7 +249,7 @@ describe("a room evicted mid-game carries on by itself (durable timers, no clien
         const r = read(code);
         const round = r.state.shared.round;
         const turn = round?.seats[round.turn]?.id;
-        return turn === person && r.state.phase === "acting" ? r : null;
+        return turn === person && r.state.phase === "playing.acting" ? r : null;
       },
       60_000,
     );

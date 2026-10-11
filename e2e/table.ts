@@ -45,6 +45,10 @@ export type PlayOptions = {
   stallMs?: number;
   /** Before dealing, wait until this many seats are taken (a person joining a bot table). */
   waitForSeats?: number;
+  /** Never tap the deck: the room cuts for the cutter when its time is up (e2e/latency.ts times it). */
+  letRoomCut?: boolean;
+  /** Around each turn move: before it is performed, and once the acting phone has seen it land. */
+  measure?: { before(page: Page): Promise<void>; after(page: Page): Promise<void> };
 };
 
 /** Plays the room with the bots until the game ends (or `rounds` rounds are scored). */
@@ -100,7 +104,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
     if (state === "cutting") {
       await opts.onMoment?.("cutting", v0);
       const cutter = views.findIndex((v) => v?.me?.mustCut);
-      const page = phones[cutter];
+      const page = opts.letRoomCut ? undefined : phones[cutter];
       if (page) {
         await wait(beat * 3);
         const deck = page.getByTestId("cut-deck");
@@ -142,6 +146,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
       if (turnView.pub.turnPhase === "play") await opts.onMoment?.("turn-play", turnView);
       if (action) {
         await wait(beat);
+        await opts.measure?.before(turnPage);
         await perform(turnPage, turnView, action, beat).catch(async (e: unknown) => {
           // The click may have landed just as the screen re-rendered (Playwright then retries a
           // detached button): if the phone's state moved on, the move went through.
@@ -160,6 +165,7 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
         acted = true;
         // Wait for the acting phone's own screen to show its move (production is slower than localhost).
         await waitForChange([turnPage], [turnView]);
+        await opts.measure?.after(turnPage);
       }
     }
     if (!acted) await wait(120);

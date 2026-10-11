@@ -1,8 +1,9 @@
 import { arrangeRun } from "../game/arrange";
+import { findGoDown } from "../game/bot";
 import type { Card, Natural } from "../game/cards";
 import { readRun, readSet, runHigh, type RunMeld, type RunPlacement } from "../game/melds";
 import { firstBroken } from "../game/refusal";
-import type { MeldProposal, Requirement } from "../game/round";
+import { describeRequirement, type MeldProposal, type Requirement } from "../game/round";
 import { rankName, rankPlural, suitSymbol } from "../game/words";
 
 const SUIT_ORDER = { S: 0, H: 1, D: 2, C: 3 } as const;
@@ -103,6 +104,17 @@ function runStatus(cards: readonly Card[], spare: "high" | "low"): SlotStatus {
 export function slotStatus(kind: "run" | "set", cards: readonly Card[], spare: "high" | "low" = "high"): SlotStatus {
   if (cards.length === 0) return no("Tap cards to add");
   return kind === "set" ? setStatus(cards) : runStatus(cards, spare);
+}
+
+/**
+ * Why "Lay down" is off: the hand can't make the round's melds at all yet, or the first box that
+ * isn't ready and what it needs. Null when every box is ready.
+ */
+export function layDownHint(slots: readonly Slot[], hand: readonly Card[], req: Requirement): string | null {
+  const notReady = slots.map((s) => ({ s, status: slotStatus(s.kind, s.cards, s.spare) })).find((x) => !x.status.ok);
+  if (!notReady) return null;
+  if (findGoDown(hand, req) === null) return `Your hand can't make ${describeRequirement(req)} yet: keep drawing and come back when it can.`;
+  return `${notReady.s.label}: ${notReady.status.line}`;
 }
 
 export const toProposals = (slots: readonly Slot[]): MeldProposal[] =>

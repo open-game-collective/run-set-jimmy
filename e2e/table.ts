@@ -65,6 +65,9 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
   await host.getByRole("button", { name: /^Deal round 1/ }).click();
   for (;;) {
     const views = await Promise.all(phones.map(readView));
+    const shown = await Promise.all(phones.map(shownHand));
+    const broken = views.flatMap((v, i) => (v ? handProblems(v, shown[i] ?? null).map((p) => `phone ${i}: ${p}`) : []));
+    if (broken.length > 0) throw new Error(`a phone's hand is wrong: ${broken.join("; ")}`);
     const v0 = views[0];
     if (!v0) throw new Error("host phone has no view");
     const state = stateName(v0.value);
@@ -170,6 +173,34 @@ export async function playTable(phones: Page[], opts: PlayOptions = {}): Promise
     }
     if (!acted) await wait(120);
   }
+}
+
+/** What the phone's screen shows of its hand: the header's count and the cards drawn. */
+export async function shownHand(page: Page): Promise<{ header: string; cards: number } | null> {
+  return page
+    .evaluate(() => {
+      const header = document.querySelector(".hand-tools .kicker")?.textContent ?? null;
+      return header === null ? null : { header, cards: document.querySelectorAll("[data-hand-card]").length };
+    })
+    .catch(() => null);
+}
+
+/**
+ * A phone's own hand must hold each card once, as many as the table says it holds, and its screen
+ * must show all of them under a header that counts them (bug bash 2026-10-11, finding 1).
+ */
+export function handProblems(v: PhoneView, shown: { header: string; cards: number } | null = null): string[] {
+  const me = v.me;
+  if (!me) return [];
+  const ids = me.hand.map((c) => c.id);
+  const out: string[] = [];
+  if (shown && shown.header !== `Your hand · ${shown.cards}`) out.push(`the screen shows ${shown.cards} cards under "${shown.header}"`);
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  if (dupes.length > 0) out.push(`cards twice in the hand: ${dupes.join(", ")}`);
+  const count = v.pub.seats[me.seat]?.cards;
+  if (v.pub.round > 0 && count !== undefined && count !== ids.length && stateName(v.value).startsWith("playing"))
+    out.push(`the hand has ${ids.length} cards, the table says ${count}`);
+  return out;
 }
 
 /** Waits until any phone's view moves on (an action landed), up to 8 s. */

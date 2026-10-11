@@ -7,7 +7,7 @@ import { cardName } from "../../game/words";
 import { RoomContext } from "../../room.context";
 import type { RoomPublicContext } from "../../room.types";
 import { MeldCards, PlayingCard, meldTitle } from "../cards";
-import { applyOrder, builderSlots, placementLabel, slotStatus, sortHand, toProposals, type Slot } from "../hand";
+import { applyOrder, builderSlots, layDownHint, placementLabel, slotStatus, sortHand, toProposals, type Slot } from "../hand";
 import { haptic } from "../haptics";
 import { sounds } from "../sound";
 import { Hand } from "./Hand";
@@ -152,6 +152,7 @@ export function PhonePlay() {
 
   const req = pub.requirement;
   const allReady = builder !== null && builder.every((s) => slotStatus(s.kind, s.cards, s.spare).ok);
+  const hint = builder && req ? layDownHint(builder, hand, req) : null;
 
   return (
     <div className={`phone play ${myTurn ? "my-turn" : ""}`} data-testid="phone-play">
@@ -246,6 +247,11 @@ export function PhonePlay() {
                 );
               })}
             </div>
+            {hint ? (
+              <p className="hint" data-testid="lay-down-hint">
+                {hint}
+              </p>
+            ) : null}
             <div className="row">
               <button className="btn" onClick={() => setBuilder(null)}>
                 Cancel

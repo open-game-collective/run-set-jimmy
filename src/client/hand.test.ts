@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Card, Suit } from "../game/cards";
 import type { RunMeld } from "../game/melds";
-import { applyOrder, builderSlots, moveCard, placementLabel, slotStatus, sortHand, toProposals } from "./hand";
+import { applyOrder, builderSlots, layDownHint, moveCard, placementLabel, slotStatus, sortHand, toProposals } from "./hand";
 
 let n = 0;
 const c = (rank: number, suit: Suit = "H"): Card => ({ id: `c${n++}`, kind: "card", suit, rank });
@@ -75,5 +75,32 @@ describe("placementLabel", () => {
     expect(placementLabel(run, { at: "high" })).toBe("Above the 8♥");
     expect(placementLabel(run, { replace: 1, jokerTo: "low" })).toBe("Swap for the Joker, Joker to 4♥");
     expect(placementLabel(run, { replace: 1, jokerTo: "high" })).toBe("Swap for the Joker, Joker to 9♥");
+  });
+});
+
+describe("layDownHint: why Lay down is off, in words (bug bash 2026-10-11, findings 3 and 4)", () => {
+  const oneRunOneSet = { runs: 1, sets: 1 };
+
+  it("a hand that cannot make the round's melds at all says so, even before any card is placed", () => {
+    const hand = [c(2, "H"), c(5, "S"), c(9, "D"), c(12, "C"), c(7, "H"), c(4, "D")];
+    expect(layDownHint(builderSlots(oneRunOneSet), hand, oneRunOneSet)).toBe(
+      "Your hand can't make 1 run and 1 set yet: keep drawing and come back when it can.",
+    );
+  });
+
+  it("a hand that can: names the first box that isn't ready and what it needs", () => {
+    const run = [c(4, "S"), c(5, "S"), c(6, "S"), c(7, "S")];
+    const set = [c(9, "H"), c(9, "D"), c(9, "C")];
+    const slots = builderSlots(oneRunOneSet);
+    const mixed = slots.map((s) => (s.kind === "run" ? { ...s, cards: [run[0], run[1], c(6, "H")].flatMap((x) => (x ? [x] : [])) } : s));
+    expect(layDownHint(mixed, [...run, ...set], oneRunOneSet)).toBe("Run: One suit only");
+    expect(layDownHint(slots, [...run, ...set], oneRunOneSet)).toBe("Run: Tap cards to add");
+  });
+
+  it("nothing to say when every box is ready", () => {
+    const run = [c(4, "S"), c(5, "S"), c(6, "S"), c(7, "S")];
+    const set = [c(9, "H"), c(9, "D"), c(9, "C")];
+    const ready = builderSlots(oneRunOneSet).map((s) => ({ ...s, cards: s.kind === "run" ? run : set }));
+    expect(layDownHint(ready, [...run, ...set], oneRunOneSet)).toBeNull();
   });
 });

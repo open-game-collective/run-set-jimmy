@@ -23,14 +23,28 @@ Rules: [RULES.md](../RULES.md) (the source of truth for play).
 - Sitting label: "Round N of 7". Silent while parked.
 - `multiCouch`: not for the POC.
 
-## Architecture (copied from rocket-crew)
-- Cloudflare Worker + one Durable Object per room through actor-kit; esbuild client bundles for
-  `tv.tsx` and `join.tsx`.
+## Architecture (actor-kit v2, ported 2026-10-11)
+- Cloudflare Worker + one Durable Object per room (`RoomActor`, `createActorClass(RoomContract)`);
+  esbuild client bundles for `tv.tsx`, `join.tsx` and `start.tsx`.
 - Pure engine in `src/game/` (cards, melds, round, game), no I/O, deterministic from a seed. The
-  room machine only sequences it: deal on start, the 3 s buy-window timer (`closeBuyWindow`), round
-  end → next deal, game end.
-- Server state keeps every hand and the deck; each phone's private view carries only its own hand;
-  the public view carries counts. Views are re-projected after every mutation.
+  room actor (`src/room.ts`) only sequences it in phases: lobby → cutting → window ⇄ acting →
+  roundOver → gameOver. Its timers (cut timeout 20 s, buy window 3 s, AI pauses) are durable and
+  scoped to their phase: they survive eviction and deploys, so no screen ever has to wake the room.
+  The shuffle seed and the room's own cut come from `ctx.random()`, so every room's journal replays.
+- Server state keeps every hand and the deck; the room sends each caller its own view
+  (`src/room.wire.ts`): a seated phone gets its own hand and nobody else's, the TV and guests get
+  the table with counts.
+- Identity: a page's `t` is its caller id. The Worker inlines it signed (`src/identity.ts`), and the
+  page's socket (`/api/:code/ws?id&sig`) is opened as that id (`withCallerIdentity`). OGS identities
+  arrive as the service message `OGS_CLAIM` after the Worker verifies the game token.
+- Domain events in the journal: `WentDown`, `Bought`, `RoundScored`, `GameOver`.
+
+## Deploying and rolling back
+- The v2 rooms are a new Durable Object class (`RoomActor`, migration v3); v1's `Room` stays as a
+  placeholder (`src/legacy-objects.ts`). v1 rooms are not carried over.
+- Cloudflare refuses `wrangler rollback` across a Durable Object class change. To go back to v1,
+  deploy the rollback branch (`rollback/actor-kit-v1`: v1 code plus the v3 migration and a
+  `RoomActor` placeholder) with `wrangler deploy`.
 
 ## Done when (POC)
 - A full 7-round game plays end to end on `wrangler dev` with a laptop TV and 3 phones on the LAN.

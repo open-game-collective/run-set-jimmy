@@ -4,16 +4,19 @@ A rummy-style card game of runs and sets over 7 rounds, for grown-ups (extended 
 friends, 3–7 seats: people, or AI players the room plays itself). The TV shows the table; each player holds their hand on a phone. An OGS game
 (appId `run-set-jimmy`): cast through the OGS app, or played in plain browsers.
 
-- **Stack:** Cloudflare Worker + one Durable Object per room through actor-kit 0.52.6 (patched),
-  XState 5, React 19, esbuild client bundles, Zod at every boundary, pnpm.
+- **Stack:** Cloudflare Worker + one Durable Object per room through actor-kit v2 (`@actor-kit/*`
+  0.3 pre-release, vendored in `vendor/`), React 19, esbuild client bundles, Zod 4 at every
+  boundary, pnpm.
 - **Architecture:** copied from Rocket Crew / Night Flight (see `/cast-party-game`).
 
 ## Feedback commands (must pass before committing)
 
 1. `pnpm typecheck`
-2. `pnpm test` (engine, room machine, client helpers)
-3. `pnpm dev:seam` in one shell, then `pnpm test:seam` (OGS contract + 4 phones over the wire)
-4. After visible changes: `pnpm dev`, then `pnpm record` (TV + phones video) and look at it
+2. `pnpm test` (engine, room actor through `simulate()`, client helpers, a 25-game fuzz sample)
+3. `pnpm test:fuzz` after a change to the room or the engine (1,000 seeded games, ~3 min)
+4. `pnpm dev:seam` in one shell, then `pnpm test:seam` (OGS contract, 4 phones over the wire, and
+   DO eviction: `e2e/eviction.seam.test.ts` runs its own `wrangler dev` on 8899)
+5. After visible changes: `pnpm dev`, then `pnpm record` (TV + phones video) and look at it
 
 ## Knowledge base (load only when relevant)
 
@@ -22,6 +25,7 @@ friends, 3–7 seats: people, or AI players the room plays itself). The TV shows
 | [RULES.md](RULES.md) | Any rules question. The engine follows it exactly. |
 | [docs/spec.md](docs/spec.md) | Surfaces, OGS integration, POC scope |
 | [docs/art-style.md](docs/art-style.md) | Any visual change |
+| [docs/actor-kit-v2-feedback.md](docs/actor-kit-v2-feedback.md) | An actor-kit v2 surprise (add to it) |
 
 ## Core principles
 
@@ -38,12 +42,17 @@ friends, 3–7 seats: people, or AI players the room plays itself). The TV shows
 - `src/game/`: `cards` (shoe, points) → `melds` (runs/sets, jokers fixed by position, slide rule)
   → `arrange` (order a run, placements) → `round` (deal/cut, turns, buy window, go down, play on,
   discard, out) → `game` (7 rounds, totals). `bot` + `sim` play whole games (tests, recordings).
-- `src/room.machine.ts`: lobby → cutting → playing.{window|acting} → roundOver → gameOver. The
-  3 s buy window is an `after` timer; views are rebuilt after every change (`src/views.ts`).
+- `src/room.ts`: the actor contract. Phases lobby → cutting → window ⇄ acting → roundOver →
+  gameOver (window/acting become `playing.*` children once actor-kit nests states); every timer is
+  a durable `scope: "state"` timer. `src/room.rules.ts`: the transitions (pure). `src/views.ts` +
+  `src/room.wire.ts`: what each caller sees, and how the client parses it back.
+- Handlers read time and randomness only through `ctx.now()` / `ctx.random()` (replay checks it).
+- Tests: `src/test/room-test-helpers.ts` runs the room in `simulate()`; `src/test/fuzz.ts` plays
+  whole games and replays their journals. actor-kit gaps go in docs/actor-kit-v2-feedback.md.
 - `src/client/`: `tv.tsx` (1920×1080 stage), `join.tsx` (phone). Pure phone logic in `hand.ts`.
 - `e2e/table.ts` drives real phone pages with the bot through the real buttons (`phone-bot.ts`);
   `bot-table.ts` seats 3 bots for a person or an explorer to join.
-- Dev port 8797 (`pnpm dev`); seam server 8798 (`pnpm dev:seam`, local OGS key set on 8831).
+- Dev port 8797 (`pnpm dev`); seam server 8798 (`pnpm dev:seam`, local OGS key set on 8837).
 
 ## Keeping docs current
 

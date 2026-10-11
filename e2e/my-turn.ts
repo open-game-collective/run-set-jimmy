@@ -27,11 +27,15 @@ export async function phoneWithTwoAi(browser: Browser): Promise<Page> {
   return page;
 }
 
-/** Waits for this phone's turn to draw. `windowClosed`: also wait for the buy window to close. */
+/**
+ * Waits for this phone's turn to draw. `windowClosed`: also wait for the buy window to close. When
+ * an AI player asked to buy, the turn starts with an offer: the phone lets the card go, then draws.
+ */
 export async function myTurnToDraw(page: Page, windowClosed: boolean): Promise<void> {
   await until("my turn to draw", async () => {
     const v = await readView(page);
     last = v ? `${JSON.stringify(v.value)} turn ${v.pub.turn} ${v.pub.turnPhase} window ${v.pub.window !== null} mine ${v.me?.myTurn}` : "no view";
+    if (v?.me?.myTurn && v.pub.turnPhase === "offer") await page.getByRole("button", { name: "Let it go" }).click();
     return v?.me?.myTurn && v.pub.turnPhase === "draw" && (!windowClosed || v.pub.window === null) ? true : null;
   });
 }

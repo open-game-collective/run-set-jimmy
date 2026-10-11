@@ -5,13 +5,12 @@
  * The tests read the room as v1's machine did (`value`, `context.public/private/server`): what a
  * caller sees is the view the room sends that caller, parsed back like the client parses it.
  */
-import { simulate, type AnyContract, type SimActor, type Simulation } from "@actor-kit/test";
+import { simulate, type SimActor, type Simulation } from "@actor-kit/test";
 import { botMove, wantsBuy } from "../game/bot";
 import type { RoundState } from "../game/round";
 import { BUY_WINDOW_MS, RoomContract, type RoomState } from "../room";
-import type { OgsClaim, RoomClientEvent, RoomPrivateContext, RoomPublicContext, RoomShared, RoomStateValue } from "../room.types";
-import { fromWire } from "../room.wire";
-import { roomState } from "./room-state";
+import type { OgsClaim, RoomMessage, RoomPrivateContext, RoomPublicContext, RoomShared } from "../room.types";
+import { RoomViewSchema, type RoomWireView } from "../room.wire";
 
 export const TV = "tv-1";
 export const PLAYERS = ["ann-1", "ben-1", "cat-1", "dan-1"] as const;
@@ -20,20 +19,6 @@ export const ROOM_CODE = "ABCD";
 /** The virtual clock starts here (ms since epoch). */
 export const START = Date.UTC(2026, 9, 11, 19, 0, 0);
 
-/**
- * The room as a contract `simulate().send` accepts any message for. actor-kit 0.3 (pre ADR-018 B)
- * types `send` with the top-level messages only, not the phases' (docs/actor-kit-v2-feedback.md).
- */
-const ROOM: AnyContract = RoomContract;
-
-/** Spawning is async (init may link); tests build rooms synchronously, so rooms are branched from these. */
-const SEEDS = 48;
-async function spawnedRoom(seed: number): Promise<Simulation> {
-  const sim = simulate({ contracts: [RoomContract], seed, now: START });
-  await sim.spawn(RoomContract, ROOM_CODE, { code: ROOM_CODE, tvId: TV }, { caller: "worker", callerType: "service" });
-  return sim;
-}
-const templates = await Promise.all(Array.from({ length: SEEDS }, (_, i) => spawnedRoom(i + 1)));
 let made = 0;
 
 export type TestRoom = {
@@ -49,50 +34,51 @@ function wrap(sim: Simulation): TestRoom {
 
 /** A fresh room in the lobby, made by the TV `tvId`. Each room deals from its own seed. */
 export function createTestActor(tvId = TV): TestRoom {
-  if (tvId !== TV) throw new Error(`test rooms are made by ${TV}`);
-  const template = templates[made++ % SEEDS];
-  if (!template) throw new Error("no room template");
-  return wrap(template.branch());
+  const sim = simulate({ contracts: [RoomContract], seed: ++made, now: START });
+  sim.spawnSync(RoomContract, ROOM_CODE, { code: ROOM_CODE, tvId }, { caller: "worker", callerType: "service" });
+  return wrap(sim);
 }
 
-export function send(room: TestRoom, callerId: string, event: RoomClientEvent): void {
-  room.sim.send(ROOM, ROOM_CODE, callerId, event);
+export function send(room: TestRoom, callerId: string, event: RoomMessage): void {
+  room.actor.send(callerId, event);
 }
 
 export function claim(room: TestRoom, callerId: string, c: OgsClaim): void {
-  room.sim.send(ROOM, ROOM_CODE, "ogs", { type: "OGS_CLAIM", callerId, claim: c }, { callerType: "service" });
+  room.actor.send("ogs", { type: "OGS_CLAIM", callerId, claim: c }, { callerType: "service" });
 }
 
-export const state = (room: TestRoom): RoomState => roomState(room.actor.state);
+export const state = (room: TestRoom): RoomState => room.actor.state;
 
-const valueOf = (phase: RoomState["phase"]): RoomStateValue => (phase === "window" || phase === "acting" ? { playing: phase } : phase);
+/** What `callerId` sees: the view the room sends that caller (checked against its schema). */
+export const seen = (room: TestRoom, callerId: string): RoomWireView => RoomViewSchema.parse(room.actor.view(callerId));
 
-/** What `callerId` sees, as the client reads it. */
-export const seen = (room: TestRoom, callerId: string) => fromWire(room.actor.view(callerId));
+/** A caller's own slot, as v1's tests read it: a role only for the TV and seated players, a player view only for those. */
+function ownSlot(p: RoomWireView["private"]): { role?: "tv" | "player"; player?: NonNullable<RoomPrivateContext["player"]> } {
+  if (p.role === "tv") return { role: "tv" };
+  if (p.role === "player" && p.player) return { role: "player", player: p.player };
+  return {};
+}
 
 /** The room as v1's tests read it: the phase, what the TV sees, each caller's own slot, and the server-only state. */
 export function snap(room: TestRoom): {
-  value: RoomStateValue;
-  context: { public: RoomPublicContext; private: Record<string, RoomPrivateContext>; server: RoomShared };
+  value: string;
+  context: { public: RoomPublicContext; private: Record<string, ReturnType<typeof ownSlot>>; server: RoomShared };
 } {
   const st = state(room);
   const callers = [st.shared.tvId, ...st.shared.seats.filter((s) => !s.ai).map((s) => s.id)];
   return {
-    value: valueOf(st.phase),
+    value: value(room),
     context: {
       public: seen(room, TV).public,
-      private: Object.fromEntries(callers.map((id) => [id, seen(room, id).private])),
+      private: Object.fromEntries(callers.map((id) => [id, ownSlot(seen(room, id).private)])),
       server: st.shared,
     },
   };
 }
 
-export const view = (room: TestRoom, callerId: string): RoomPrivateContext => seen(room, callerId).private;
+export const view = (room: TestRoom, callerId: string) => ownSlot(seen(room, callerId).private);
 export const pub = (room: TestRoom) => seen(room, TV).public;
-export const value = (room: TestRoom): string => {
-  const v = valueOf(state(room).phase);
-  return typeof v === "string" ? v : `playing.${v.playing}`;
-};
+export const value = (room: TestRoom): string => state(room).phase.join(".");
 
 export function round(room: TestRoom): RoundState {
   const r = state(room).shared.round;

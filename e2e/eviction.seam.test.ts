@@ -16,7 +16,7 @@ import WebSocket from "ws";
 import { z } from "zod";
 import { RoomContract } from "../src/room";
 import { AI_THINK_MS, BUY_WINDOW_MS, CUT_TIMEOUT_MS } from "../src/room";
-import type { RoomClientEvent } from "../src/room.types";
+import type { RoomMessage } from "../src/room.types";
 import { JWKS_PORT } from "./ogs-jwks";
 
 const PORT = Number(process.env.EVICTION_PORT ?? 8899);
@@ -142,7 +142,7 @@ async function bootOf(path: string): Promise<z.infer<typeof BootZ>> {
   return BootZ.parse(JSON.parse(json));
 }
 
-type Phone = { id: string; send: (e: RoomClientEvent) => void; close: () => void };
+type Phone = { id: string; send: (e: RoomMessage) => void; close: () => void };
 
 async function phone(code: string): Promise<Phone> {
   const boot = await bootOf(`/join/${code}?t=${crypto.randomUUID()}`);

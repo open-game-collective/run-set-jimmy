@@ -17,7 +17,7 @@ export async function readView(page: Page): Promise<PhoneView | null> {
   return (await page.evaluate(() => Reflect.get(window, "__rsjView") ?? null)) as PhoneView | null;
 }
 
-export const stateName = (v: RoomStateValue): string => (typeof v === "string" ? v : `playing.${v.playing}`);
+export const stateName = (v: RoomStateValue): string => v;
 
 const seatId = (i: number) => `s${i}`;
 

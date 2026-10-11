@@ -1,4 +1,5 @@
-import { z } from "zod";
+// zod/mini: tree-shakes, so the phone and TV pages carry only what this one check uses.
+import * as z from "zod/mini";
 
 /**
  * Run Set Jimmy as an installable web app, for players without the OGS app: when to offer
@@ -21,7 +22,7 @@ const KEY = "rsj:table";
 const KEEP_MS = 12 * 3600_000;
 const SEAT = /^\/join\/([A-Z]{4})$/;
 const TOKEN = /^[0-9a-f-]{36}$/;
-const Saved = z.object({ code: z.string().regex(/^[A-Z]{4}$/), t: z.string().regex(TOKEN), at: z.number() });
+const Saved = z.object({ code: z.string().check(z.regex(/^[A-Z]{4}$/)), t: z.string().check(z.regex(TOKEN)), at: z.number() });
 
 /** Remembers this phone's seat (the room and its rejoin token); other pages are ignored. */
 export function rememberTable(store: Store, href: string, now: number): void {

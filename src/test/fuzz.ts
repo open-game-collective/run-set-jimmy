@@ -4,15 +4,13 @@
  * it checks that no caller's view holds a card from someone else's hand; at the end it replays the
  * room's journal (replayJournal checks every after-state's checksum and the emitted events).
  */
-import { replayJournal, simulate, type AnyContract, type SimEvent } from "@actor-kit/test";
+import { replayJournal, simulate, type SimEvent } from "@actor-kit/test";
 import { botMove, wantsBuy } from "../game/bot";
 import { mulberry32, type Rng } from "../game/cards";
 import { AI_THINK_MS, BUY_WINDOW_MS, CUT_TIMEOUT_MS, RoomContract } from "../room";
-import type { RoomClientEvent } from "../room.types";
-import { RoomWireViewZ } from "../room.wire";
-import { roomState } from "./room-state";
+import type { RoomMessage } from "../room.types";
+import { RoomViewSchema, type RoomWireView } from "../room.wire";
 
-const ROOM: AnyContract = RoomContract;
 const CODE = "FUZZ";
 const TV = "tv-fuzz";
 const MAX_STEPS = 60_000;
@@ -28,9 +26,11 @@ export type FuzzResult = {
   replayed: number;
   /** Every hidden-hand breach seen: who saw whose card, at which step. */
   leaks: string[];
+  /** Switches between playing.window and playing.acting. */
+  switches: number;
 };
 
-type Wire = ReturnType<typeof RoomWireViewZ.parse>;
+type Wire = RoomWireView;
 
 /**
  * Every card id a view shows besides the cut: the table, the discard, its own hand. (The cut card
@@ -38,9 +38,9 @@ type Wire = ReturnType<typeof RoomWireViewZ.parse>;
  */
 function cardIdsIn(view: Wire): Set<string> {
   const ids = new Set<string>();
-  for (const m of view.melds) for (const c of m.cards) ids.add(c.id);
-  if (view.discardTop) ids.add(view.discardTop.id);
-  for (const c of view.me?.hand ?? []) ids.add(c.id);
+  for (const m of view.public.melds) for (const c of m.cards) ids.add(c.id);
+  if (view.public.discardTop) ids.add(view.public.discardTop.id);
+  for (const c of view.private.player?.hand ?? []) ids.add(c.id);
   return ids;
 }
 
@@ -54,8 +54,8 @@ export async function playFuzzGame(seed: number): Promise<FuzzResult> {
   const sim = simulate({ contracts: [RoomContract], seed, now: Date.UTC(2026, 9, 11) + seed * 1000 });
   await sim.spawn(RoomContract, CODE, { code: CODE, tvId: TV }, { caller: "worker", callerType: "service" });
   const room = sim.actor(RoomContract, CODE);
-  const send = (caller: string, event: RoomClientEvent) => sim.send(ROOM, CODE, caller, event);
-  const st = () => roomState(room.state);
+  const send = (caller: string, event: RoomMessage) => room.send(caller, event);
+  const st = () => room.state;
 
   const host = people[0] ?? "";
   /** The host is the first person in the seat order (it moves when the seats do). */
@@ -70,24 +70,44 @@ export async function playFuzzGame(seed: number): Promise<FuzzResult> {
   const callers = [TV, ...people, "stranger"];
   let steps = 0;
 
+  let switches = 0;
+  let before: { leaf: string; local: unknown } | null = null;
+  /** playing's local is the round being played, and a switch between its children keeps it. */
+  const checkPlaying = () => {
+    const s = st();
+    if (s.phase[0] !== "playing") {
+      before = null;
+      return;
+    }
+    const local = s.locals[0];
+    const leaf = s.phase.join(".");
+    if (JSON.stringify(local) !== JSON.stringify({ round: s.shared.roundNumber })) leaks.push(`step ${steps}: playing's local is ${JSON.stringify(local)} in round ${s.shared.roundNumber}`);
+    if (before && before.leaf !== leaf) {
+      switches++;
+      if (JSON.stringify(before.local) !== JSON.stringify(local)) leaks.push(`step ${steps}: playing's local changed across ${before.leaf} → ${leaf}`);
+    }
+    before = { leaf, local };
+  };
+
   const check = () => {
+    checkPlaying();
     const r = st().shared.round;
     for (const caller of callers) {
-      const view = RoomWireViewZ.parse(room.view(caller));
+      const view = RoomViewSchema.parse(room.view(caller));
       const ids = cardIdsIn(view);
       for (const seat of r?.seats ?? []) {
         if (seat.id === caller) continue;
         for (const card of seat.hand) if (ids.has(card.id)) leaks.push(`step ${steps}: ${caller} saw ${seat.id}'s ${card.id}`);
       }
       const own = (r?.seats.find((x) => x.id === caller)?.hand ?? []).map((c) => c.id).join();
-      const shown = (view.me?.hand ?? []).map((c) => c.id).join();
+      const shown = (view.private.player?.hand ?? []).map((c) => c.id).join();
       if (shown !== own) leaks.push(`step ${steps}: ${caller} was shown the hand [${shown}], not its own [${own}]`);
     }
   };
 
   for (; steps < MAX_STEPS; steps++) {
     const s = st();
-    const phase = s.phase;
+    const phase = s.phase.join(".");
     if (phase === "gameOver") break;
     const sh = s.shared;
     if (phase === "lobby") throw new Error(`seed ${seed}: never started`);
@@ -102,7 +122,7 @@ export async function playFuzzGame(seed: number): Promise<FuzzResult> {
       if (!r) throw new Error(`seed ${seed}: playing without a round`);
       const turn = r.seats[r.turn]?.id ?? "";
       const turnIsAi = sh.seats.some((x) => x.id === turn && x.ai);
-      if (phase === "window") {
+      if (phase === "playing.window") {
         for (const seat of r.seats)
           if (seat.id !== turn && people.includes(seat.id) && wantsBuy(r, seat.id) && rng() < 0.8) send(seat.id, { type: "BUY" });
         const after = st().shared.round;
@@ -147,7 +167,8 @@ export async function playFuzzGame(seed: number): Promise<FuzzResult> {
     ai,
     steps,
     rounds: end.shared.sheet?.rounds.length ?? 0,
-    phase: end.phase,
+    phase: end.phase.join("."),
+    switches,
     events: sim.events(),
     replayed,
     leaks,

@@ -17,7 +17,8 @@
     "../room.wire.ts",
     "../room.ts",
     "../room.rules.ts",
-    "../views.ts"
+    "../views.ts",
+    "../room.views.ts"
   ],
   "exclude": []
 }

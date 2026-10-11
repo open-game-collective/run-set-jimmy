@@ -6,26 +6,26 @@ settings:
 
 overrides:
   '@open-game-system/cast-kit-core': file:./vendor/open-game-system-cast-kit-core-0.2.0.tgz
-  '@actor-kit/core': file:./vendor/actor-kit-core-0.2.0-a384ecd.tgz
-  '@actor-kit/worker': file:./vendor/actor-kit-worker-0.2.0-a384ecd.tgz
-  '@actor-kit/client': file:./vendor/actor-kit-client-0.2.0-a384ecd.tgz
+  '@actor-kit/core': file:./vendor/actor-kit-core-0.2.0-4181811.tgz
+  '@actor-kit/worker': file:./vendor/actor-kit-worker-0.2.0-4181811.tgz
+  '@actor-kit/client': file:./vendor/actor-kit-client-0.2.0-4181811.tgz
 
 importers:
 
   .:
     dependencies:
       '@actor-kit/client':
-        specifier: file:vendor/actor-kit-client-0.2.0-a384ecd.tgz
-        version: file:vendor/actor-kit-client-0.2.0-a384ecd.tgz
+        specifier: file:vendor/actor-kit-client-0.2.0-4181811.tgz
+        version: file:vendor/actor-kit-client-0.2.0-4181811.tgz
       '@actor-kit/core':
-        specifier: file:vendor/actor-kit-core-0.2.0-a384ecd.tgz
-        version: file:vendor/actor-kit-core-0.2.0-a384ecd.tgz
+        specifier: file:vendor/actor-kit-core-0.2.0-4181811.tgz
+        version: file:vendor/actor-kit-core-0.2.0-4181811.tgz
       '@actor-kit/react':
-        specifier: file:vendor/actor-kit-react-0.2.0-a384ecd.tgz
-        version: file:vendor/actor-kit-react-0.2.0-a384ecd.tgz(react@19.3.0)
+        specifier: file:vendor/actor-kit-react-0.2.0-4181811.tgz
+        version: file:vendor/actor-kit-react-0.2.0-4181811.tgz(react@19.3.0)
       '@actor-kit/worker':
-        specifier: file:vendor/actor-kit-worker-0.2.0-a384ecd.tgz
-        version: file:vendor/actor-kit-worker-0.2.0-a384ecd.tgz(jose@6.2.12)
+        specifier: file:vendor/actor-kit-worker-0.2.0-4181811.tgz
+        version: file:vendor/actor-kit-worker-0.2.0-4181811.tgz(jose@6.2.12)
       '@open-game-system/cast-kit-core':
         specifier: file:vendor/open-game-system-cast-kit-core-0.2.0.tgz
         version: file:vendor/open-game-system-cast-kit-core-0.2.0.tgz(typescript@7.0.2)
@@ -52,8 +52,8 @@ importers:
         version: 4.6.5
     devDependencies:
       '@actor-kit/test':
-        specifier: file:vendor/actor-kit-test-0.2.0-a384ecd.tgz
-        version: file:vendor/actor-kit-test-0.2.0-a384ecd.tgz(jose@6.2.12)
+        specifier: file:vendor/actor-kit-test-0.2.0-4181811.tgz
+        version: file:vendor/actor-kit-test-0.2.0-4181811.tgz(jose@6.2.12)
       '@ai-sdk/openai':
         specifier: ^4.0.86
         version: 4.0.86(zod@4.6.5)
@@ -111,26 +111,26 @@ importers:
 
 packages:
 
-  '@actor-kit/client@file:vendor/actor-kit-client-0.2.0-a384ecd.tgz':
-    resolution: {integrity: sha512-OjPggBTy0V4StnO/XFHXJ6ukolj2sK0oXB4xyCC6Jdn0TVWR/aAIedF3axXFO60G+Pfj6BRUZmniMXuJ6lMwLg==, tarball: file:vendor/actor-kit-client-0.2.0-a384ecd.tgz}
+  '@actor-kit/client@file:vendor/actor-kit-client-0.2.0-4181811.tgz':
+    resolution: {integrity: sha512-sB24CWSpnsJSoN8MB1Ezd98kBVt2wdn3Lm6nsxo/W4co2mXnp2Pe4E7Tv8juYKorqlYbCmSAAVdxBHOPD+KG9w==, tarball: file:vendor/actor-kit-client-0.2.0-4181811.tgz}
     version: 0.2.0
 
-  '@actor-kit/core@file:vendor/actor-kit-core-0.2.0-a384ecd.tgz':
-    resolution: {integrity: sha512-RC6+jTaMLmq1BpYdZaihob9bq4tL+NNc6oEKJ7zggZNSGeVzvFWpNNVECkWjV8FMv0HuH1S11lpzmjyHnzeB/g==, tarball: file:vendor/actor-kit-core-0.2.0-a384ecd.tgz}
+  '@actor-kit/core@file:vendor/actor-kit-core-0.2.0-4181811.tgz':
+    resolution: {integrity: sha512-wkwfT/7egSJWyaHPCtMAVmOrFuyWgBCyM3XMWODJmm887oqjxJfwcJaTr0mPLuuaI5uBro3iTc3QK53NN5PeQg==, tarball: file:vendor/actor-kit-core-0.2.0-4181811.tgz}
     version: 0.2.0
 
-  '@actor-kit/react@file:vendor/actor-kit-react-0.2.0-a384ecd.tgz':
-    resolution: {integrity: sha512-OBjUIRRMDEqQ43iGpl7ry6D9o8XJGAWVnwuFG1XiT2uIyID9EycXaERdaNy3UTXglmAsknUS3Cqy47vFrzaf0A==, tarball: file:vendor/actor-kit-react-0.2.0-a384ecd.tgz}
+  '@actor-kit/react@file:vendor/actor-kit-react-0.2.0-4181811.tgz':
+    resolution: {integrity: sha512-69QD9OnxHUfflhdhlv7Wj24kP3a3DrFeLPfLJkEN0IRb/Wz415wRfNKc/2toeDU/x8ARcznP9xbJeERdT/utWA==, tarball: file:vendor/actor-kit-react-0.2.0-4181811.tgz}
     version: 0.2.0
     peerDependencies:
       react: '>=18'
 
-  '@actor-kit/test@file:vendor/actor-kit-test-0.2.0-a384ecd.tgz':
-    resolution: {integrity: sha512-dFM+W1zMsLPgpWsALWPjh6cFUfAo9D9tyKVTlgiZghX38f3geOcD8VZAtud5Dpwnuv0puG0H5O9D1n2LRoYABQ==, tarball: file:vendor/actor-kit-test-0.2.0-a384ecd.tgz}
+  '@actor-kit/test@file:vendor/actor-kit-test-0.2.0-4181811.tgz':
+    resolution: {integrity: sha512-CEMv4B2zSIw4gMmqEw/NSsSTc1CZpHbr22OqgyJvypduZCyTzU8vRjOvu8petQIdIw0Qn3OTivUYzglGO7Hgcg==, tarball: file:vendor/actor-kit-test-0.2.0-4181811.tgz}
     version: 0.2.0
 
-  '@actor-kit/worker@file:vendor/actor-kit-worker-0.2.0-a384ecd.tgz':
-    resolution: {integrity: sha512-ccc99Vn0TCfnhkoRArAj56RgUutviffI83z3CS0X8854JU13a8iFTI1eagLs3TFXpfTPDR5J0x8HyNylyrTiUw==, tarball: file:vendor/actor-kit-worker-0.2.0-a384ecd.tgz}
+  '@actor-kit/worker@file:vendor/actor-kit-worker-0.2.0-4181811.tgz':
+    resolution: {integrity: sha512-GTOkYRdIv7eJwk1aJSvKKD1ZbrJX/47F1OTAmb6dhivFrq0AhNymsPoJNJdjDWxwqvxlIOdgBujQosL933vn8A==, tarball: file:vendor/actor-kit-worker-0.2.0-4181811.tgz}
     version: 0.2.0
     peerDependencies:
       jose: ^6.0.0
@@ -2557,31 +2557,31 @@ packages:
 
 snapshots:
 
-  '@actor-kit/client@file:vendor/actor-kit-client-0.2.0-a384ecd.tgz':
+  '@actor-kit/client@file:vendor/actor-kit-client-0.2.0-4181811.tgz':
     dependencies:
-      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-a384ecd.tgz
+      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-4181811.tgz
 
-  '@actor-kit/core@file:vendor/actor-kit-core-0.2.0-a384ecd.tgz':
+  '@actor-kit/core@file:vendor/actor-kit-core-0.2.0-4181811.tgz':
     dependencies:
       zod: 4.6.5
 
-  '@actor-kit/react@file:vendor/actor-kit-react-0.2.0-a384ecd.tgz(react@19.3.0)':
+  '@actor-kit/react@file:vendor/actor-kit-react-0.2.0-4181811.tgz(react@19.3.0)':
     dependencies:
-      '@actor-kit/client': file:vendor/actor-kit-client-0.2.0-a384ecd.tgz
-      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-a384ecd.tgz
+      '@actor-kit/client': file:vendor/actor-kit-client-0.2.0-4181811.tgz
+      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-4181811.tgz
       react: 19.3.0
 
-  '@actor-kit/test@file:vendor/actor-kit-test-0.2.0-a384ecd.tgz(jose@6.2.12)':
+  '@actor-kit/test@file:vendor/actor-kit-test-0.2.0-4181811.tgz(jose@6.2.12)':
     dependencies:
-      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-a384ecd.tgz
-      '@actor-kit/worker': file:vendor/actor-kit-worker-0.2.0-a384ecd.tgz(jose@6.2.12)
+      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-4181811.tgz
+      '@actor-kit/worker': file:vendor/actor-kit-worker-0.2.0-4181811.tgz(jose@6.2.12)
       zod: 4.6.5
     transitivePeerDependencies:
       - jose
 
-  '@actor-kit/worker@file:vendor/actor-kit-worker-0.2.0-a384ecd.tgz(jose@6.2.12)':
+  '@actor-kit/worker@file:vendor/actor-kit-worker-0.2.0-4181811.tgz(jose@6.2.12)':
     dependencies:
-      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-a384ecd.tgz
+      '@actor-kit/core': file:vendor/actor-kit-core-0.2.0-4181811.tgz
       workers-qb: 1.15.0
       zod: 4.6.5
     optionalDependencies:

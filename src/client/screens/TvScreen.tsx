@@ -39,7 +39,6 @@ function useLogSounds(log: Pub["log"]): void {
   }, [log]);
 }
 
-const STATE_LABELS = { lobby: "lobby", cutting: "cutting", roundOver: "roundOver", gameOver: "gameOver" } as const;
 
 export function TvScreen({ joinUrl }: { joinUrl: string }) {
   useOgsTv();
@@ -47,7 +46,7 @@ export function TvScreen({ joinUrl }: { joinUrl: string }) {
   const scale = useStageScale();
   const pub = RoomContext.useSelector((s) => s.public);
   const value = RoomContext.useSelector((s) => s.value);
-  const phase = typeof value === "string" ? STATE_LABELS[value] : "playing";
+  const phase = value.startsWith("playing") ? "playing" : value;
   useLogSounds(pub.log);
 
   return (

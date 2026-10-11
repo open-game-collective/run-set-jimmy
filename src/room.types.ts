@@ -1,26 +1,24 @@
+import type { ContractMessages, Infer } from "@actor-kit/core";
 import type { z } from "zod";
 import type { ScoreSheet } from "./game/game";
 import type { RoundState } from "./game/round";
-import type {
-  BootSchema,
-  OgsClaimSchema,
-  PlayerViewSchema,
-  RoomClientEventSchema,
-  RoomPrivateContextSchema,
-  RoomPublicContextSchema,
-  RoomStateValueSchema,
-} from "./room.schemas";
+import type { RoomContract } from "./room";
+import type { OgsClaimSchema } from "./room.schemas";
+import type { PlayerSchema, PublicSchema, RoomWireView } from "./room.wire";
 
-/** Every message a phone or TV may send (the TV only sends AWAY). */
-export type RoomClientEvent = z.infer<typeof RoomClientEventSchema>;
+/** Every message the room accepts (OGS_CLAIM too), typed from the contract. */
+export type RoomMessage = ContractMessages<RoomContract>;
 
-export type RoomPublicContext = z.infer<typeof RoomPublicContextSchema>;
-export type PlayerView = z.infer<typeof PlayerViewSchema>;
+export type RoomPublicContext = Infer<typeof PublicSchema>;
+export type PlayerView = Infer<typeof PlayerSchema>;
 /** Each caller receives only its own slot: its hand and nobody else's. */
-export type RoomPrivateContext = z.infer<typeof RoomPrivateContextSchema>;
-export type RoomStateValue = z.infer<typeof RoomStateValueSchema>;
-export type Boot = z.infer<typeof BootSchema>;
+export type RoomPrivateContext = RoomWireView["private"];
+/** The phase, as the screens see it: "lobby", "playing.window", … */
+export type RoomStateValue = RoomWireView["value"];
 export type OgsClaim = z.infer<typeof OgsClaimSchema>;
+
+/** What the Worker inlines into a TV or phone page: the caller's signed id and its first view. */
+export type Boot = { roomCode: string; id: string; sig: string; view: unknown };
 
 /** A seat at the table: a person's phone, or an AI player the room plays itself (`ai`). */
 export type Seat = { id: string; name: string; avatar: string | null; ai: boolean };

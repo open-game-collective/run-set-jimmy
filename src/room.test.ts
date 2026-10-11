@@ -13,6 +13,7 @@ import {
   botStep,
   playOutRound,
   restartRoom,
+  state,
   pub,
   round,
   send,
@@ -541,5 +542,46 @@ describe("AI players (computer seats, played by the room)", () => {
     }
     expect(value(room)).toBe("gameOver");
     expect(pub(room).winners.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("who may send what (roles on messages)", () => {
+  it("only a seated player moves: a phone that never sat, or the TV, is refused with wrong_role", () => {
+    const room = startedRoom();
+    expect(room.actor.send("eve-1", { type: "DRAW", from: "discard" })).toMatchObject({ ok: false, code: "wrong_role" });
+    expect(room.actor.send(TV, { type: "DRAW", from: "discard" })).toMatchObject({ ok: false, code: "wrong_role" });
+    expect(room.actor.send(BEN, { type: "DRAW", from: "discard" })).toEqual({ ok: true });
+  });
+
+  it("only a phone that has no seat joins; only OGS (a service) claims", () => {
+    const room = createTestActor();
+    send(room, ANN, { type: "JOIN", name: "Ann" });
+    expect(room.actor.send(ANN, { type: "JOIN", name: "Annie" })).toMatchObject({ ok: false, code: "wrong_role" });
+    expect(room.actor.send(TV, { type: "JOIN", name: "TV" })).toMatchObject({ ok: false, code: "wrong_role" });
+    const forged = { type: "OGS_CLAIM", callerId: ANN, claim: { profileId: "x", name: "Forged", avatar: "", couch: null } } as const;
+    expect(room.actor.send(BEN, forged)).toMatchObject({ ok: false, code: "wrong_role" });
+    expect(pub(room).seats[0]?.name).toBe("Ann");
+  });
+
+  it("the host's controls are for the host: another player is refused by the guard", () => {
+    const room = createTestActor();
+    joinPlayers(room);
+    expect(room.actor.send(BEN, { type: "START" })).toMatchObject({ ok: false, code: "guard_failed" });
+  });
+});
+
+describe("states (playing keeps its local while the window and the turns alternate)", () => {
+  it("playing's local is the round being played, through every window ⇄ acting switch of a round", () => {
+    const room = startedRoom();
+    let switches = 0;
+    let leaf = value(room);
+    for (let i = 0; i < 20_000 && value(room).startsWith("playing"); i++) {
+      expect(state(room).locals[0]).toEqual({ round: 1 });
+      botStep(room);
+      if (value(room) !== leaf && value(room).startsWith("playing")) switches++;
+      leaf = value(room);
+    }
+    expect(value(room)).toBe("roundOver");
+    expect(switches).toBeGreaterThan(4);
   });
 });

@@ -5,7 +5,7 @@ import { APP_ID } from "./game/sitting";
 import { signId, verifyId } from "./identity";
 import { hostTarget, ogsClaim } from "./ogs-claim";
 import { RoomContract } from "./room";
-import type { Boot, RoomClientEvent } from "./room.types";
+import type { Boot, RoomMessage } from "./room.types";
 
 /** The room actor (actor-kit v2). v1's `Room` class stays as a placeholder (src/legacy-objects.ts). */
 export const RoomActor = createActorClass(RoomContract);
@@ -14,7 +14,7 @@ export { Game, Remix, Room, Session } from "./legacy-objects";
 type RoomStub = {
   spawn(input: { actorId: string; caller: string; callerType: "service"; input: { code: string; tvId: string } }): Promise<void>;
   getSnapshot(caller: string, callerType: "user" | "service"): Promise<{ checksum: string; snapshot: unknown; role: string }>;
-  send(caller: string, callerType: "user" | "service", event: RoomClientEvent | { type: "OGS_CLAIM"; callerId: string; claim: unknown }): Promise<{ ok: boolean; error?: string }>;
+  send(caller: string, callerType: "user" | "service", event: RoomMessage): Promise<{ ok: true } | { ok: false; code: string; message: string }>;
   fetch(req: Request): Promise<Response>;
 };
 
@@ -144,7 +144,7 @@ export default {
           // Throws for a room that doesn't exist.
           await stub.getSnapshot("ogs", "service");
           const sent = await stub.send("ogs", "service", event);
-          if (!sent.ok) throw new Error(`OGS_CLAIM refused: ${sent.error ?? "unknown"}`);
+          if (!sent.ok) throw new Error(`OGS_CLAIM refused (${sent.code}): ${sent.message}`);
         },
       });
     }

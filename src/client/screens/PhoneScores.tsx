@@ -9,7 +9,7 @@ export function PhoneScores({ final }: { final: boolean }) {
   const last = pub.scores.at(-1) ?? [];
   const order = pub.seats.map((_, i) => i).sort((a, b) => (pub.totals[a] ?? 0) - (pub.totals[b] ?? 0));
   const mine = me ? last[me.seat] : undefined;
-  const iWon = final && me !== undefined && pub.winners.includes(me.seat);
+  const iWon = final && me !== null && pub.winners.includes(me.seat);
   return (
     <div className="phone scores">
       <header className="phone-head">
